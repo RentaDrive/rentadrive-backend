@@ -34,6 +34,10 @@ admin.initializeApp({
 const db = admin.firestore();
 const app = express();
 
+// Confiar en proxies (Railway, Heroku, etc.)
+app.set('trust proxy', 1);
+
+
 // Middlewares de seguridad
 app.use(helmet({
   contentSecurityPolicy: {
