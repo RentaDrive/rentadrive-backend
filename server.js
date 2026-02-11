@@ -273,6 +273,105 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// ============================================
+// ENDPOINT DE PRUEBA: Verificar Variables Firebase
+// ============================================
+app.get('/api/test-firebase-config', (req, res) => {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+  const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+  
+  res.json({
+    hasProjectId: !!projectId,
+    projectId: projectId ? projectId.substring(0, 20) + '...' : 'NO CONFIGURADO',
+    
+    hasClientEmail: !!clientEmail,
+    clientEmail: clientEmail ? clientEmail.substring(0, 30) + '...' : 'NO CONFIGURADO',
+    
+    hasPrivateKey: !!privateKey,
+    privateKeyLength: privateKey ? privateKey.length : 0,
+    privateKeyStart: privateKey ? privateKey.substring(0, 50) : 'NO CONFIGURADO',
+    privateKeyHasNewlines: privateKey ? privateKey.includes('\n') : false,
+    privateKeyHasLiteralBackslashN: privateKey ? privateKey.includes('\\n') : false,
+    
+    diagnosis: {
+      allVariablesSet: !!projectId && !!clientEmail && !!privateKey,
+      newlinesCorrect: privateKey ? privateKey.includes('\n') : false,
+      startsCorrectly: privateKey ? privateKey.startsWith('"-----BEGIN') || privateKey.startsWith('-----BEGIN') : false
+    }
+  });
+});
+
+// ============================================
+// ENDPOINT DE PRUEBA: Intentar inicializar Firebase
+// ============================================
+app.get('/api/test-firebase-init', async (req, res) => {
+  try {
+    const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+    
+    // Probar diferentes formatos
+    const formats = {
+      original: privateKey,
+      withReplace: privateKey ? privateKey.replace(/\\n/g, '\n') : null,
+      withoutQuotes: privateKey ? privateKey.replace(/^"|"$/g, '') : null,
+      withReplaceAndNoQuotes: privateKey ? privateKey.replace(/^"|"$/g, '').replace(/\\n/g, '\n') : null
+    };
+    
+    const results = {};
+    
+    for (const [name, key] of Object.entries(formats)) {
+      if (!key) continue;
+      
+      try {
+        // Intentar crear una credencial temporal
+        const tempCred = admin.credential.cert({
+          projectId: process.env.FIREBASE_PROJECT_ID,
+          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+          privateKey: key
+        });
+        
+        results[name] = {
+          success: true,
+          keyLength: key.length,
+          hasNewlines: key.includes('\n'),
+          startsWithQuote: key.startsWith('"'),
+          endsWithQuote: key.endsWith('"')
+        };
+      } catch (error) {
+        results[name] = {
+          success: false,
+          error: error.message,
+          keyLength: key.length,
+          hasNewlines: key.includes('\n'),
+          startsWithQuote: key.startsWith('"'),
+          endsWithQuote: key.endsWith('"')
+        };
+      }
+    }
+    
+    res.json({
+      results,
+      recommendation: determineCorrectFormat(results)
+    });
+    
+  } catch (error) {
+    res.status(500).json({ 
+      error: error.message 
+    });
+  }
+});
+
+function determineCorrectFormat(results) {
+  for (const [format, result] of Object.entries(results)) {
+    if (result.success) {
+      return `Use format: ${format}`;
+    }
+  }
+  return 'None of the formats worked. Check your credentials.';
+}
+
+
+
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
