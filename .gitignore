@@ -1,3 +1,4 @@
 node_modules/
 .env
 *.log
+create-super-admin.js
