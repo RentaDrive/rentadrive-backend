@@ -6,11 +6,23 @@ const cors = require('cors');
 require('dotenv').config();
 
 // Inicializar Firebase Admin
+let privateKey = process.env.FIREBASE_PRIVATE_KEY;
+
+// Eliminar comillas si existen
+if (privateKey && privateKey.startsWith('"') && privateKey.endsWith('"')) {
+  privateKey = privateKey.slice(1, -1);
+}
+
+// Reemplazar \\n por \n
+if (privateKey) {
+  privateKey = privateKey.replace(/\\n/g, '\n');
+}
+
 admin.initializeApp({
   credential: admin.credential.cert({
     projectId: process.env.FIREBASE_PROJECT_ID,
     clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-    privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n')
+    privateKey: privateKey
   })
 });
 
