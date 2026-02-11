@@ -54,7 +54,6 @@ app.use(cors());
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
-
 // Servir el panel de administración
 app.use('/admin', express.static('admin-panel'));
 
@@ -113,6 +112,58 @@ function requireRole(...allowedRoles) {
     next();
   };
 }
+
+// ============================================
+// FUNCIÓN: SANITIZAR STRINGS
+// ============================================
+function sanitizeString(str, maxLength = 200) {
+  if (!str) return '';
+  
+  return String(str)
+    .trim()
+    .slice(0, maxLength)
+    .replace(/[<>]/g, '')
+    .replace(/javascript:/gi, '')
+    .replace(/on\w+\s*=/gi, '');
+}
+
+// ============================================
+// MIDDLEWARE: Logging de seguridad
+// ============================================
+app.use((req, res, next) => {
+  const suspiciousPatterns = [
+    /(\bunion\b.*\bselect\b)/i,
+    /(\bor\b.*=.*)/i,
+    /(javascript:|<script|onerror=)/i,
+    /(\.\.\/)|(\.\.\\)/,
+  ];
+  
+  const fullUrl = req.originalUrl + JSON.stringify(req.body);
+  
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(fullUrl)) {
+      console.log('⚠️ SOSPECHOSO:', {
+        ip: req.ip,
+        url: req.originalUrl,
+        method: req.method,
+        timestamp: new Date().toISOString()
+      });
+      
+      db.collection('security_alerts').add({
+        type: 'suspicious_request',
+        ip: req.ip,
+        url: req.originalUrl,
+        method: req.method,
+        pattern: pattern.toString(),
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      }).catch(err => console.error('Error logging security alert:', err));
+      
+      break;
+    }
+  }
+  
+  next();
+});
 
 // ============================================
 // ENDPOINT: REGISTRO DE USUARIO
@@ -251,7 +302,6 @@ app.post('/api/login', async (req, res) => {
     
     const customToken = await admin.auth().createCustomToken(userRecord.uid);
     
-    // Actualizar último login
     await db.collection('users').doc(userRecord.uid).update({
       lastLogin: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -366,11 +416,9 @@ app.post('/api/admin/login',
     body('password')
       .trim()
       .isLength({ min: 6, max: 100 }).withMessage('Contraseña debe tener entre 6-100 caracteres')
-      .matches(/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/).withMessage('Contraseña contiene caracteres no permitidos')
   ],
   async (req, res) => {
   try {
-    // Validar inputs
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       console.log('⚠️ Validación fallida:', errors.array());
@@ -385,7 +433,6 @@ app.post('/api/admin/login',
     
     console.log('🔐 Intento de login admin:', email);
     
-    // Buscar admin en Firestore
     const adminSnapshot = await db.collection('admins')
       .where('email', '==', email)
       .where('active', '==', true)
@@ -402,7 +449,6 @@ app.post('/api/admin/login',
     const adminDoc = adminSnapshot.docs[0];
     const adminData = adminDoc.data();
     
-    // Verificar contraseña
     const passwordMatch = await bcrypt.compare(password, adminData.passwordHash);
     
     if (!passwordMatch) {
@@ -413,7 +459,6 @@ app.post('/api/admin/login',
       });
     }
     
-    // Generar JWT token
     const token = jwt.sign(
       { 
         adminId: adminDoc.id,
@@ -426,7 +471,6 @@ app.post('/api/admin/login',
       { expiresIn: '24h' }
     );
     
-    // Actualizar último login
     await db.collection('admins').doc(adminDoc.id).update({
       lastLogin: admin.firestore.FieldValue.serverTimestamp()
     });
@@ -454,6 +498,7 @@ app.post('/api/admin/login',
     });
   }
 });
+
 // ============================================
 // ENDPOINT: CREAR NUEVO ADMIN (solo super_admin)
 // ============================================
@@ -470,7 +515,6 @@ app.post('/api/admin/create-admin', authenticateAdmin, requireRole('super_admin'
       });
     }
     
-    // Validar roles permitidos
     const validRoles = ['super_admin', 'vendedor', 'soporte'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({ 
@@ -479,7 +523,6 @@ app.post('/api/admin/create-admin', authenticateAdmin, requireRole('super_admin'
       });
     }
     
-    // Verificar si el email ya existe
     const existingAdmin = await db.collection('admins')
       .where('email', '==', email)
       .get();
@@ -491,10 +534,8 @@ app.post('/api/admin/create-admin', authenticateAdmin, requireRole('super_admin'
       });
     }
     
-    // Hash de la contraseña
     const passwordHash = await bcrypt.hash(password, 10);
     
-    // Crear admin en Firestore
     const adminDoc = await db.collection('admins').add({
       email,
       passwordHash,
@@ -505,7 +546,6 @@ app.post('/api/admin/create-admin', authenticateAdmin, requireRole('super_admin'
       createdBy: req.admin.email
     });
     
-    // Registrar en audit log
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
@@ -591,7 +631,6 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
       });
     }
     
-    // Obtener datos actuales del usuario
     const userDoc = await db.collection('users').doc(userId).get();
     
     if (!userDoc.exists) {
@@ -603,17 +642,14 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
     
     const userData = userDoc.data();
     
-    // Calcular días previos
     const now = new Date();
     const oldExpiry = userData.subscriptionExpiry?.toDate();
     const oldDaysLeft = oldExpiry && userData.subscriptionActive ? 
       Math.max(0, Math.floor((oldExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
     
-    // Calcular nueva fecha de expiración (desde hoy)
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + parseInt(days));
     
-    // Actualizar usuario
     await db.collection('users').doc(userId).update({
       subscriptionActive: true,
       subscriptionExpiry: admin.firestore.Timestamp.fromDate(expiryDate),
@@ -622,7 +658,6 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
       lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log con descripción detallada
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
@@ -652,6 +687,291 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
       daysSet: parseInt(days),
       previousDays: oldDaysLeft,
       modifiedBy: req.admin.email
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error del servidor' 
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT: EXTENDER/AGREGAR DÍAS
+// ============================================
+app.post('/api/admin/extend-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
+  try {
+    const { userId, days } = req.body;
+    
+    console.log(`➕ Agregando días: ${userId} + ${days} días`);
+    
+    if (!userId || !days) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'userId y days son requeridos' 
+      });
+    }
+    
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Usuario no encontrado' 
+      });
+    }
+    
+    const userData = userDoc.data();
+    
+    const now = new Date();
+    const currentExpiry = userData.subscriptionExpiry?.toDate() || now;
+    const currentDaysLeft = userData.subscriptionActive ? 
+      Math.max(0, Math.floor((currentExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
+    
+    let newExpiryDate;
+    
+    if (userData.subscriptionActive && currentExpiry > now) {
+      newExpiryDate = new Date(currentExpiry);
+      newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
+    } else {
+      newExpiryDate = new Date();
+      newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
+    }
+    
+    const newDaysTotal = Math.floor((newExpiryDate - now) / (1000 * 60 * 60 * 24));
+    
+    await db.collection('users').doc(userId).update({
+      subscriptionActive: true,
+      subscriptionExpiry: admin.firestore.Timestamp.fromDate(newExpiryDate),
+      plan: 'premium',
+      lastModifiedBy: req.admin.email,
+      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: 'AGREGAR_DIAS',
+      userId: userId,
+      userEmail: userData.email,
+      details: { 
+        action: 'add_days',
+        daysAdded: parseInt(days),
+        previousDays: currentDaysLeft,
+        newDaysTotal: newDaysTotal,
+        previousExpiry: userData.subscriptionExpiry?.toDate().toISOString() || null,
+        newExpiry: newExpiryDate.toISOString(),
+        description: `Agregó ${days} días (de ${currentDaysLeft} a ${newDaysTotal} días)`
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`✅ Días agregados por ${req.admin.email}: ${userId} + ${days} días (${currentDaysLeft} → ${newDaysTotal})`);
+    
+    res.json({
+      success: true,
+      message: `Se agregaron ${days} días. Total: ${newDaysTotal} días`,
+      userId: userId,
+      newExpiryDate: newExpiryDate.toISOString(),
+      daysAdded: parseInt(days),
+      previousDays: currentDaysLeft,
+      newTotalDays: newDaysTotal,
+      modifiedBy: req.admin.email
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error del servidor' 
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT: DESACTIVAR SUSCRIPCIÓN
+// ============================================
+app.post('/api/admin/deactivate-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
+  try {
+    const { userId, reason } = req.body;
+    
+    console.log(`🚫 Desactivando suscripción: ${userId}`);
+    
+    if (!userId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'userId es requerido' 
+      });
+    }
+    
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Usuario no encontrado' 
+      });
+    }
+    
+    const userData = userDoc.data();
+    
+    const now = new Date();
+    const oldExpiry = userData.subscriptionExpiry?.toDate();
+    const daysLost = oldExpiry && userData.subscriptionActive ? 
+      Math.max(0, Math.floor((oldExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
+    
+    await db.collection('users').doc(userId).update({
+      subscriptionActive: false,
+      deactivatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      deactivatedBy: req.admin.email,
+      deactivationReason: reason || 'No especificado',
+      lastModifiedBy: req.admin.email,
+      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: 'DESACTIVAR_SUSCRIPCION',
+      userId: userId,
+      userEmail: userData.email,
+      details: { 
+        action: 'deactivate',
+        reason: reason || 'Sin razón especificada',
+        daysLost: daysLost,
+        previousExpiry: oldExpiry?.toISOString() || null,
+        wasActive: userData.subscriptionActive || false,
+        description: `Desactivó suscripción (perdió ${daysLost} días). Razón: ${reason || 'N/A'}`
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`✅ Suscripción desactivada por ${req.admin.email}: ${userId} (perdió ${daysLost} días)`);
+    
+    res.json({
+      success: true,
+      message: 'Suscripción desactivada',
+      userId: userId,
+      daysLost: daysLost,
+      deactivatedBy: req.admin.email
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error del servidor' 
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT: OBTENER ESTADÍSTICAS
+// ============================================
+app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
+  try {
+    const usersSnapshot = await db.collection('users').get();
+    
+    let totalUsers = 0;
+    let activeSubscriptions = 0;
+    let inactiveSubscriptions = 0;
+    let expiredSubscriptions = 0;
+    const now = Date.now();
+    
+    usersSnapshot.forEach(doc => {
+      const data = doc.data();
+      totalUsers++;
+      
+      const isActive = data.subscriptionActive === true;
+      const expiry = data.subscriptionExpiry?.toMillis() || 0;
+      const isValid = isActive && now < expiry;
+      
+      if (isValid) {
+        activeSubscriptions++;
+      } else if (isActive && now >= expiry) {
+        expiredSubscriptions++;
+      } else {
+        inactiveSubscriptions++;
+      }
+    });
+    
+    const adminsSnapshot = await db.collection('admins').get();
+    const totalAdmins = adminsSnapshot.size;
+    
+    res.json({
+      success: true,
+      stats: {
+        totalUsers,
+        activeSubscriptions,
+        inactiveSubscriptions,
+        expiredSubscriptions,
+        totalAdmins
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error del servidor' 
+    });
+  }
+});
+
+// ============================================
+// ENDPOINT: BUSCAR USUARIO POR EMAIL
+// ============================================
+app.get('/api/admin/search-user', authenticateAdmin, async (req, res) => {
+  try {
+    let { email } = req.query;
+    
+    if (!email) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email es requerido' 
+      });
+    }
+    
+    email = email.trim().toLowerCase();
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email) || email.length > 100) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Formato de email inválido' 
+      });
+    }
+    
+    const usersSnapshot = await db.collection('users')
+      .where('email', '==', email)
+      .get();
+    
+    if (usersSnapshot.empty) {
+      return res.json({ 
+        success: false, 
+        message: 'Usuario no encontrado' 
+      });
+    }
+    
+    const userDoc = usersSnapshot.docs[0];
+    const data = userDoc.data();
+    
+    res.json({
+      success: true,
+      user: {
+        userId: userDoc.id,
+        email: data.email,
+        deviceId: data.deviceId,
+        subscriptionActive: data.subscriptionActive || false,
+        subscriptionExpiry: data.subscriptionExpiry?.toDate().toISOString() || null,
+        plan: data.plan || 'none',
+        createdAt: data.createdAt?.toDate().toISOString() || null,
+        lastLogin: data.lastLogin?.toDate().toISOString() || null
+      }
     });
     
   } catch (error) {
@@ -750,7 +1070,6 @@ app.post('/api/admin/toggle-admin-status', authenticateAdmin, requireRole('super
       });
     }
     
-    // No permitir desactivarse a sí mismo
     if (adminId === req.admin.adminId) {
       return res.status(400).json({ 
         success: false, 
@@ -758,363 +1077,6 @@ app.post('/api/admin/toggle-admin-status', authenticateAdmin, requireRole('super
       });
     }
     
-    await db.collection('admins').doc(adminId).update({
-      active: active,
-      modifiedBy: req.admin.email,
-      modifiedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    // Registrar en audit log
-    await db.collection('audit_logs').add({
-      adminId: req.admin.adminId,
-      adminEmail: req.admin.email,
-      adminName: req.admin.name,
-      action: active ? 'activate_admin' : 'deactivate_admin',
-      targetAdminId: adminId,
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    console.log(`✅ Admin ${active ? 'activado' : 'desactivado'}: ${adminId} por ${req.admin.email}`);
-    
-    res.json({
-      success: true,
-      message: `Admin ${active ? 'activado' : 'desactivado'} exitosamente`
-    });
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ success: false, message: 'Error del servidor' });
-  }
-});
-
-// ============================================
-// ENDPOINT: HEALTH CHECK
-// ============================================
-app.get('/api/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    message: 'Servidor RentaDrive OK' 
-  });
-});
-
-// ============================================
-// ENDPOINT: EXTENDER/AGREGAR DÍAS
-// ============================================
-app.post('/api/admin/extend-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
-  try {
-    const { userId, days } = req.body;
-    
-    console.log(`➕ Agregando días: ${userId} + ${days} días`);
-    
-    if (!userId || !days) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'userId y days son requeridos' 
-      });
-    }
-    
-    const userDoc = await db.collection('users').doc(userId).get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Usuario no encontrado' 
-      });
-    }
-    
-    const userData = userDoc.data();
-    
-    // Calcular días actuales
-    const now = new Date();
-    const currentExpiry = userData.subscriptionExpiry?.toDate() || now;
-    const currentDaysLeft = userData.subscriptionActive ? 
-      Math.max(0, Math.floor((currentExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
-    
-    let newExpiryDate;
-    
-    // Si tiene suscripción activa y no ha expirado, sumar desde la fecha de expiración
-    if (userData.subscriptionActive && currentExpiry > now) {
-      newExpiryDate = new Date(currentExpiry);
-      newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
-    } else {
-      // Si está inactiva o expirada, sumar desde hoy
-      newExpiryDate = new Date();
-      newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
-    }
-    
-    const newDaysTotal = Math.floor((newExpiryDate - now) / (1000 * 60 * 60 * 24));
-    
-    await db.collection('users').doc(userId).update({
-      subscriptionActive: true,
-      subscriptionExpiry: admin.firestore.Timestamp.fromDate(newExpiryDate),
-      plan: 'premium',
-      lastModifiedBy: req.admin.email,
-      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    // Registrar en audit log con descripción detallada
-    await db.collection('audit_logs').add({
-      adminId: req.admin.adminId,
-      adminEmail: req.admin.email,
-      adminName: req.admin.name,
-      action: 'AGREGAR_DIAS',
-      userId: userId,
-      userEmail: userData.email,
-      details: { 
-        action: 'add_days',
-        daysAdded: parseInt(days),
-        previousDays: currentDaysLeft,
-        newDaysTotal: newDaysTotal,
-        previousExpiry: userData.subscriptionExpiry?.toDate().toISOString() || null,
-        newExpiry: newExpiryDate.toISOString(),
-        description: `Agregó ${days} días (de ${currentDaysLeft} a ${newDaysTotal} días)`
-      },
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    console.log(`✅ Días agregados por ${req.admin.email}: ${userId} + ${days} días (${currentDaysLeft} → ${newDaysTotal})`);
-    
-    res.json({
-      success: true,
-      message: `Se agregaron ${days} días. Total: ${newDaysTotal} días`,
-      userId: userId,
-      newExpiryDate: newExpiryDate.toISOString(),
-      daysAdded: parseInt(days),
-      previousDays: currentDaysLeft,
-      newTotalDays: newDaysTotal,
-      modifiedBy: req.admin.email
-    });
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error del servidor' 
-    });
-  }
-});
-
-// ============================================
-// ENDPOINT: DESACTIVAR SUSCRIPCIÓN
-// ============================================
-app.post('/api/admin/deactivate-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
-  try {
-    const { userId, reason } = req.body;
-    
-    console.log(`🚫 Desactivando suscripción: ${userId}`);
-    
-    if (!userId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'userId es requerido' 
-      });
-    }
-    
-    const userDoc = await db.collection('users').doc(userId).get();
-    
-    if (!userDoc.exists) {
-      return res.status(404).json({ 
-        success: false, 
-        message: 'Usuario no encontrado' 
-      });
-    }
-    
-    const userData = userDoc.data();
-    
-    // Calcular días que tenía antes de desactivar
-    const now = new Date();
-    const oldExpiry = userData.subscriptionExpiry?.toDate();
-    const daysLost = oldExpiry && userData.subscriptionActive ? 
-      Math.max(0, Math.floor((oldExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
-    
-    await db.collection('users').doc(userId).update({
-      subscriptionActive: false,
-      deactivatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      deactivatedBy: req.admin.email,
-      deactivationReason: reason || 'No especificado',
-      lastModifiedBy: req.admin.email,
-      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    // Registrar en audit log con descripción detallada
-    await db.collection('audit_logs').add({
-      adminId: req.admin.adminId,
-      adminEmail: req.admin.email,
-      adminName: req.admin.name,
-      action: 'DESACTIVAR_SUSCRIPCION',
-      userId: userId,
-      userEmail: userData.email,
-      details: { 
-        action: 'deactivate',
-        reason: reason || 'Sin razón especificada',
-        daysLost: daysLost,
-        previousExpiry: oldExpiry?.toISOString() || null,
-        wasActive: userData.subscriptionActive || false,
-        description: `Desactivó suscripción (perdió ${daysLost} días). Razón: ${reason || 'N/A'}`
-      },
-      timestamp: admin.firestore.FieldValue.serverTimestamp()
-    });
-    
-    console.log(`✅ Suscripción desactivada por ${req.admin.email}: ${userId} (perdió ${daysLost} días)`);
-    
-    res.json({
-      success: true,
-      message: 'Suscripción desactivada',
-      userId: userId,
-      daysLost: daysLost,
-      deactivatedBy: req.admin.email
-    });
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error del servidor' 
-    });
-  }
-});
-
-// ============================================
-// ENDPOINT: OBTENER ESTADÍSTICAS
-// ============================================
-app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
-  try {
-    const usersSnapshot = await db.collection('users').get();
-    
-    let totalUsers = 0;
-    let activeSubscriptions = 0;
-    let inactiveSubscriptions = 0;
-    let expiredSubscriptions = 0;
-    const now = Date.now();
-    
-    usersSnapshot.forEach(doc => {
-      const data = doc.data();
-      totalUsers++;
-      
-      const isActive = data.subscriptionActive === true;
-      const expiry = data.subscriptionExpiry?.toMillis() || 0;
-      const isValid = isActive && now < expiry;
-      
-      if (isValid) {
-        activeSubscriptions++;
-      } else if (isActive && now >= expiry) {
-        expiredSubscriptions++;
-      } else {
-        inactiveSubscriptions++;
-      }
-    });
-    
-    // Contar admins
-    const adminsSnapshot = await db.collection('admins').get();
-    const totalAdmins = adminsSnapshot.size;
-    
-    res.json({
-      success: true,
-      stats: {
-        totalUsers,
-        activeSubscriptions,
-        inactiveSubscriptions,
-        expiredSubscriptions,
-        totalAdmins
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error del servidor' 
-    });
-  }
-});
-
-// ============================================
-// ENDPOINT: BUSCAR USUARIO POR EMAIL
-// ============================================
-app.get('/api/admin/search-user', authenticateAdmin, async (req, res) => {
-  try {
-    let { email } = req.query;
-    
-    if (!email) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email es requerido' 
-      });
-    }
-    
-    // Sanitizar y validar email
-    email = email.trim().toLowerCase();
-    
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-   if (!emailRegex.test(email) || email.length > 100) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Formato de email inválido' 
-      });
-    }
-    
-    const usersSnapshot = await db.collection('users')
-      .where('email', '==', email)
-      .get();
-    
-    if (usersSnapshot.empty) {
-      return res.json({ 
-        success: false, 
-        message: 'Usuario no encontrado' 
-      });
-    }
-    
-    const userDoc = usersSnapshot.docs[0];
-    const data = userDoc.data();
-    
-    res.json({
-      success: true,
-      user: {
-        userId: userDoc.id,
-        email: data.email,
-        deviceId: data.deviceId,
-        subscriptionActive: data.subscriptionActive || false,
-        subscriptionExpiry: data.subscriptionExpiry?.toDate().toISOString() || null,
-        plan: data.plan || 'none',
-        createdAt: data.createdAt?.toDate().toISOString() || null,
-        lastLogin: data.lastLogin?.toDate().toISOString() || null
-      }
-    });
-    
-  } catch (error) {
-    console.error('❌ Error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Error del servidor' 
-    });
-  }
-});
-
-// ============================================
-// ENDPOINT: DESACTIVAR/ACTIVAR ADMIN (solo super_admin)
-// ============================================
-app.post('/api/admin/toggle-admin-status', authenticateAdmin, requireRole('super_admin'), async (req, res) => {
-  try {
-    const { adminId, active } = req.body;
-    
-    if (!adminId || typeof active !== 'boolean') {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'adminId y active (boolean) son requeridos' 
-      });
-    }
-    
-    // No permitir desactivarse a sí mismo
-    if (adminId === req.admin.adminId) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'No puedes desactivarte a ti mismo' 
-      });
-    }
-    
-    // Verificar que el admin existe
     const adminDoc = await db.collection('admins').doc(adminId).get();
     
     if (!adminDoc.exists) {
@@ -1130,7 +1092,6 @@ app.post('/api/admin/toggle-admin-status', authenticateAdmin, requireRole('super
       modifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
@@ -1168,7 +1129,6 @@ app.delete('/api/admin/delete-admin/:adminId', authenticateAdmin, requireRole('s
       });
     }
     
-    // No permitir eliminarse a sí mismo
     if (adminId === req.admin.adminId) {
       return res.status(400).json({ 
         success: false, 
@@ -1176,7 +1136,6 @@ app.delete('/api/admin/delete-admin/:adminId', authenticateAdmin, requireRole('s
       });
     }
     
-    // Verificar que el admin existe
     const adminDoc = await db.collection('admins').doc(adminId).get();
     
     if (!adminDoc.exists) {
@@ -1188,10 +1147,8 @@ app.delete('/api/admin/delete-admin/:adminId', authenticateAdmin, requireRole('s
     
     const adminData = adminDoc.data();
     
-    // Eliminar el admin
     await db.collection('admins').doc(adminId).delete();
     
-    // Registrar en audit log
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
@@ -1230,7 +1187,6 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
       });
     }
     
-    // Validar roles permitidos
     const validRoles = ['super_admin', 'vendedor', 'soporte'];
     if (!validRoles.includes(newRole)) {
       return res.status(400).json({ 
@@ -1239,7 +1195,6 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
       });
     }
     
-    // No permitir cambiar su propio rol
     if (adminId === req.admin.adminId) {
       return res.status(400).json({ 
         success: false, 
@@ -1264,7 +1219,6 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
       modifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
@@ -1293,60 +1247,15 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
 });
 
 // ============================================
-// FUNCIÓN: SANITIZAR STRINGS
+// ENDPOINT: HEALTH CHECK
 // ============================================
-function sanitizeString(str, maxLength = 200) {
-  if (!str) return '';
-  
-  return String(str)
-    .trim()
-    .slice(0, maxLength)
-    .replace(/[<>]/g, '') // Remover < y >
-    .replace(/javascript:/gi, '') // Remover javascript:
-    .replace(/on\w+\s*=/gi, ''); // Remover event handlers
-}
-
-// ============================================
-// MIDDLEWARE: Logging de seguridad
-// ============================================
-app.use((req, res, next) => {
-  // Log de requests sospechosos
-  const suspiciousPatterns = [
-    /(\bunion\b.*\bselect\b)/i,
-    /(\bor\b.*=.*)/i,
-    /(javascript:|<script|onerror=)/i,
-    /(\.\.\/)|(\.\.\\)/,
-  ];
-  
-  const fullUrl = req.originalUrl + JSON.stringify(req.body);
-  
-  for (const pattern of suspiciousPatterns) {
-    if (pattern.test(fullUrl)) {
-      console.log('⚠️ SOSPECHOSO:', {
-        ip: req.ip,
-        url: req.originalUrl,
-        method: req.method,
-        body: req.body,
-        timestamp: new Date().toISOString()
-      });
-      
-      // Registrar en Firestore
-      db.collection('security_alerts').add({
-        type: 'suspicious_request',
-        ip: req.ip,
-        url: req.originalUrl,
-        method: req.method,
-        pattern: pattern.toString(),
-        timestamp: admin.firestore.FieldValue.serverTimestamp()
-      }).catch(err => console.error('Error logging security alert:', err));
-      
-      break;
-    }
-  }
-  
-  next();
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    message: 'Servidor RentaDrive OK' 
+  });
 });
-
 
 // Iniciar servidor
 const PORT = process.env.PORT || 3000;
@@ -1363,6 +1272,8 @@ app.listen(PORT, () => {
   console.log(`   GET  /api/admin/users`);
   console.log(`   GET  /api/admin/list-admins (super_admin)`);
   console.log(`   POST /api/admin/activate-subscription`);
+  console.log(`   POST /api/admin/extend-subscription`);
+  console.log(`   POST /api/admin/deactivate-subscription`);
   console.log(`   GET  /api/admin/audit-logs`);
   console.log(`   POST /api/admin/toggle-admin-status (super_admin)`);
 });
