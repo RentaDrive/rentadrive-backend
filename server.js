@@ -7,6 +7,9 @@ const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 require('dotenv').config();
 
+const helmet = require('helmet');
+const { body, validationResult } = require('express-validator');
+
 // Inicializar Firebase Admin
 let privateKey = process.env.FIREBASE_PRIVATE_KEY;
 
@@ -31,9 +34,25 @@ admin.initializeApp({
 const db = admin.firestore();
 const app = express();
 
-// Middlewares
+// Middlewares de seguridad
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      scriptSrc: ["'self'"],
+      imgSrc: ["'self'", "data:", "https:"],
+    },
+  },
+  crossOriginEmbedderPolicy: false
+}));
+
 app.use(cors());
-app.use(express.json());
+
+// Limitar tamaño del body para prevenir ataques DoS
+app.use(express.json({ limit: '10kb' }));
+app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
 
 // Servir el panel de administración
@@ -336,18 +355,35 @@ app.post('/api/validate', async (req, res) => {
 // ============================================
 // ENDPOINT: LOGIN DE ADMIN
 // ============================================
-app.post('/api/admin/login', adminLimiter, async (req, res) => {
+app.post('/api/admin/login', 
+  adminLimiter,
+  [
+    body('email')
+      .trim()
+      .isEmail().withMessage('Email inválido')
+      .normalizeEmail()
+      .isLength({ max: 100 }).withMessage('Email muy largo'),
+    body('password')
+      .trim()
+      .isLength({ min: 6, max: 100 }).withMessage('Contraseña debe tener entre 6-100 caracteres')
+      .matches(/^[a-zA-Z0-9!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]*$/).withMessage('Contraseña contiene caracteres no permitidos')
+  ],
+  async (req, res) => {
   try {
+    // Validar inputs
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      console.log('⚠️ Validación fallida:', errors.array());
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Datos inválidos',
+        errors: errors.array()
+      });
+    }
+    
     const { email, password } = req.body;
     
     console.log('🔐 Intento de login admin:', email);
-    
-    if (!email || !password) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Email y contraseña requeridos' 
-      });
-    }
     
     // Buscar admin en Firestore
     const adminSnapshot = await db.collection('admins')
@@ -418,7 +454,6 @@ app.post('/api/admin/login', adminLimiter, async (req, res) => {
     });
   }
 });
-
 // ============================================
 // ENDPOINT: CREAR NUEVO ADMIN (solo super_admin)
 // ============================================
@@ -999,12 +1034,24 @@ app.get('/api/admin/stats', authenticateAdmin, async (req, res) => {
 // ============================================
 app.get('/api/admin/search-user', authenticateAdmin, async (req, res) => {
   try {
-    const { email } = req.query;
+    let { email } = req.query;
     
     if (!email) {
       return res.status(400).json({ 
         success: false, 
         message: 'Email es requerido' 
+      });
+    }
+    
+    // Sanitizar y validar email
+    email = email.trim().toLowerCase();
+    
+    // Validar formato de email
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+   if (!emailRegex.test(email) || email.length > 100) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Formato de email inválido' 
       });
     }
     
@@ -1044,7 +1091,6 @@ app.get('/api/admin/search-user', authenticateAdmin, async (req, res) => {
     });
   }
 });
-
 
 // ============================================
 // ENDPOINT: DESACTIVAR/ACTIVAR ADMIN (solo super_admin)
@@ -1246,6 +1292,60 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
   }
 });
 
+// ============================================
+// FUNCIÓN: SANITIZAR STRINGS
+// ============================================
+function sanitizeString(str, maxLength = 200) {
+  if (!str) return '';
+  
+  return String(str)
+    .trim()
+    .slice(0, maxLength)
+    .replace(/[<>]/g, '') // Remover < y >
+    .replace(/javascript:/gi, '') // Remover javascript:
+    .replace(/on\w+\s*=/gi, ''); // Remover event handlers
+}
+
+// ============================================
+// MIDDLEWARE: Logging de seguridad
+// ============================================
+app.use((req, res, next) => {
+  // Log de requests sospechosos
+  const suspiciousPatterns = [
+    /(\bunion\b.*\bselect\b)/i,
+    /(\bor\b.*=.*)/i,
+    /(javascript:|<script|onerror=)/i,
+    /(\.\.\/)|(\.\.\\)/,
+  ];
+  
+  const fullUrl = req.originalUrl + JSON.stringify(req.body);
+  
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(fullUrl)) {
+      console.log('⚠️ SOSPECHOSO:', {
+        ip: req.ip,
+        url: req.originalUrl,
+        method: req.method,
+        body: req.body,
+        timestamp: new Date().toISOString()
+      });
+      
+      // Registrar en Firestore
+      db.collection('security_alerts').add({
+        type: 'suspicious_request',
+        ip: req.ip,
+        url: req.originalUrl,
+        method: req.method,
+        pattern: pattern.toString(),
+        timestamp: admin.firestore.FieldValue.serverTimestamp()
+      }).catch(err => console.error('Error logging security alert:', err));
+      
+      break;
+    }
+  }
+  
+  next();
+});
 
 
 // Iniciar servidor
