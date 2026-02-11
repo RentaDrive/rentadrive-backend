@@ -541,13 +541,13 @@ app.get('/api/admin/users', authenticateAdmin, async (req, res) => {
 });
 
 // ============================================
-// ENDPOINT: ACTIVAR SUSCRIPCIÓN
+// ENDPOINT: ACTIVAR/ESTABLECER DÍAS EXACTOS
 // ============================================
 app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
   try {
     const { userId, days } = req.body;
     
-    console.log(`🔧 Activando suscripción: ${userId} - ${days} días`);
+    console.log(`🔧 Estableciendo días exactos: ${userId} - ${days} días`);
     
     if (!userId || !days) {
       return res.status(400).json({ 
@@ -556,7 +556,25 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
       });
     }
     
-    // Calcular fecha de expiración
+    // Obtener datos actuales del usuario
+    const userDoc = await db.collection('users').doc(userId).get();
+    
+    if (!userDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Usuario no encontrado' 
+      });
+    }
+    
+    const userData = userDoc.data();
+    
+    // Calcular días previos
+    const now = new Date();
+    const oldExpiry = userData.subscriptionExpiry?.toDate();
+    const oldDaysLeft = oldExpiry && userData.subscriptionActive ? 
+      Math.max(0, Math.floor((oldExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
+    
+    // Calcular nueva fecha de expiración (desde hoy)
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + parseInt(days));
     
@@ -569,30 +587,36 @@ app.post('/api/admin/activate-subscription', authenticateAdmin, requireRole('sup
       lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log
+    // Registrar en audit log con descripción detallada
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
       adminName: req.admin.name,
-      action: 'activate_subscription',
+      action: 'ESTABLECER_DIAS_EXACTOS',
       userId: userId,
+      userEmail: userData.email,
       details: { 
-        days: parseInt(days),
-        expiryDate: expiryDate.toISOString(),
-        plan: 'premium'
+        action: 'set_exact_days',
+        previousDays: oldDaysLeft,
+        newDays: parseInt(days),
+        previousExpiry: oldExpiry?.toISOString() || null,
+        newExpiry: expiryDate.toISOString(),
+        wasActive: userData.subscriptionActive || false,
+        description: `Estableció ${days} días exactos (antes tenía: ${oldDaysLeft} días)`
       },
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    console.log(`✅ Suscripción activada por ${req.admin.email}: ${userId} - ${days} días`);
+    console.log(`✅ Días establecidos por ${req.admin.email}: ${userId} - ${days} días (antes: ${oldDaysLeft})`);
     
     res.json({
       success: true,
-      message: `Suscripción activada por ${days} días`,
+      message: `Suscripción establecida con ${days} días`,
       userId: userId,
       expiryDate: expiryDate.toISOString(),
-      daysActivated: parseInt(days),
-      activatedBy: req.admin.email
+      daysSet: parseInt(days),
+      previousDays: oldDaysLeft,
+      modifiedBy: req.admin.email
     });
     
   } catch (error) {
@@ -740,13 +764,13 @@ app.get('/api/health', (req, res) => {
 });
 
 // ============================================
-// ENDPOINT: EXTENDER SUSCRIPCIÓN
+// ENDPOINT: EXTENDER/AGREGAR DÍAS
 // ============================================
 app.post('/api/admin/extend-subscription', authenticateAdmin, requireRole('super_admin', 'vendedor'), async (req, res) => {
   try {
     const { userId, days } = req.body;
     
-    console.log(`➕ Extendiendo suscripción: ${userId} + ${days} días`);
+    console.log(`➕ Agregando días: ${userId} + ${days} días`);
     
     if (!userId || !days) {
       return res.status(400).json({ 
@@ -765,17 +789,26 @@ app.post('/api/admin/extend-subscription', authenticateAdmin, requireRole('super
     }
     
     const userData = userDoc.data();
+    
+    // Calcular días actuales
+    const now = new Date();
+    const currentExpiry = userData.subscriptionExpiry?.toDate() || now;
+    const currentDaysLeft = userData.subscriptionActive ? 
+      Math.max(0, Math.floor((currentExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
+    
     let newExpiryDate;
     
-    // Si ya tiene suscripción activa, extender desde la fecha actual de expiración
-    if (userData.subscriptionExpiry && userData.subscriptionActive) {
-      newExpiryDate = userData.subscriptionExpiry.toDate();
+    // Si tiene suscripción activa y no ha expirado, sumar desde la fecha de expiración
+    if (userData.subscriptionActive && currentExpiry > now) {
+      newExpiryDate = new Date(currentExpiry);
       newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
     } else {
-      // Si no tiene suscripción o está inactiva, empezar desde hoy
+      // Si está inactiva o expirada, sumar desde hoy
       newExpiryDate = new Date();
       newExpiryDate.setDate(newExpiryDate.getDate() + parseInt(days));
     }
+    
+    const newDaysTotal = Math.floor((newExpiryDate - now) / (1000 * 60 * 60 * 24));
     
     await db.collection('users').doc(userId).update({
       subscriptionActive: true,
@@ -785,29 +818,36 @@ app.post('/api/admin/extend-subscription', authenticateAdmin, requireRole('super
       lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log
+    // Registrar en audit log con descripción detallada
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
       adminName: req.admin.name,
-      action: 'extend_subscription',
+      action: 'AGREGAR_DIAS',
       userId: userId,
+      userEmail: userData.email,
       details: { 
+        action: 'add_days',
         daysAdded: parseInt(days),
-        newExpiryDate: newExpiryDate.toISOString(),
-        previousExpiry: userData.subscriptionExpiry?.toDate().toISOString() || null
+        previousDays: currentDaysLeft,
+        newDaysTotal: newDaysTotal,
+        previousExpiry: userData.subscriptionExpiry?.toDate().toISOString() || null,
+        newExpiry: newExpiryDate.toISOString(),
+        description: `Agregó ${days} días (de ${currentDaysLeft} a ${newDaysTotal} días)`
       },
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    console.log(`✅ Suscripción extendida por ${req.admin.email}: ${userId} + ${days} días`);
+    console.log(`✅ Días agregados por ${req.admin.email}: ${userId} + ${days} días (${currentDaysLeft} → ${newDaysTotal})`);
     
     res.json({
       success: true,
-      message: `Suscripción extendida por ${days} días`,
+      message: `Se agregaron ${days} días. Total: ${newDaysTotal} días`,
       userId: userId,
       newExpiryDate: newExpiryDate.toISOString(),
       daysAdded: parseInt(days),
+      previousDays: currentDaysLeft,
+      newTotalDays: newDaysTotal,
       modifiedBy: req.admin.email
     });
     
@@ -845,6 +885,14 @@ app.post('/api/admin/deactivate-subscription', authenticateAdmin, requireRole('s
       });
     }
     
+    const userData = userDoc.data();
+    
+    // Calcular días que tenía antes de desactivar
+    const now = new Date();
+    const oldExpiry = userData.subscriptionExpiry?.toDate();
+    const daysLost = oldExpiry && userData.subscriptionActive ? 
+      Math.max(0, Math.floor((oldExpiry - now) / (1000 * 60 * 60 * 24))) : 0;
+    
     await db.collection('users').doc(userId).update({
       subscriptionActive: false,
       deactivatedAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -854,25 +902,32 @@ app.post('/api/admin/deactivate-subscription', authenticateAdmin, requireRole('s
       lastModifiedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    // Registrar en audit log
+    // Registrar en audit log con descripción detallada
     await db.collection('audit_logs').add({
       adminId: req.admin.adminId,
       adminEmail: req.admin.email,
       adminName: req.admin.name,
-      action: 'deactivate_subscription',
+      action: 'DESACTIVAR_SUSCRIPCION',
       userId: userId,
+      userEmail: userData.email,
       details: { 
-        reason: reason || 'No especificado'
+        action: 'deactivate',
+        reason: reason || 'Sin razón especificada',
+        daysLost: daysLost,
+        previousExpiry: oldExpiry?.toISOString() || null,
+        wasActive: userData.subscriptionActive || false,
+        description: `Desactivó suscripción (perdió ${daysLost} días). Razón: ${reason || 'N/A'}`
       },
       timestamp: admin.firestore.FieldValue.serverTimestamp()
     });
     
-    console.log(`✅ Suscripción desactivada por ${req.admin.email}: ${userId}`);
+    console.log(`✅ Suscripción desactivada por ${req.admin.email}: ${userId} (perdió ${daysLost} días)`);
     
     res.json({
       success: true,
       message: 'Suscripción desactivada',
       userId: userId,
+      daysLost: daysLost,
       deactivatedBy: req.admin.email
     });
     
