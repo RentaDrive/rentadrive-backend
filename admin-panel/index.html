@@ -9,7 +9,8 @@
 <body>
     <!-- Login Card -->
     <div id="loginCard" class="login-card">
-        <h1>🚗 RentaDrive</h1>
+        <h1><img src="logo.png" alt="RentaDrive" class="logo-img"> RentaDrive</h1>
+
         <p>Panel de Administración</p>
         
         <div id="loginMessage"></div>
@@ -20,9 +21,14 @@
                 <input type="email" id="loginEmail" placeholder="tu@email.com" required autocomplete="email">
             </div>
             <div class="form-group">
-                <label>🔒 Contraseña</label>
-                <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
-            </div>
+    <label>🔒 Contraseña</label>
+    <div class="password-input-wrapper">
+        <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPassword', this)" tabindex="-1">
+            👁️
+        </button>
+    </div>
+</div>
             <button type="submit">🚀 Iniciar Sesión</button>
         </form>
     </div>
@@ -31,7 +37,7 @@
     <div id="dashboard" class="dashboard container">
         <!-- Header -->
         <div class="header">
-            <h1>🚗 RentaDrive</h1>
+            <h1><img src="logo.png" alt="RentaDrive" class="logo-img-header"> RentaDrive</h1>
             <div class="user-info">
                 <span id="adminName"></span>
                 <span id="adminRole" class="role-badge"></span>
@@ -149,9 +155,14 @@
                             <input type="text" id="newAdminName" placeholder="Nombre completo" required>
                         </div>
                         <div class="form-group">
-                            <label>🔒 Contraseña</label>
-                            <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" required minlength="6">
-                        </div>
+    <label>🔒 Contraseña</label>
+    <div class="password-input-wrapper">
+        <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" required minlength="6">
+        <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newAdminPassword', this)" tabindex="-1">
+            👁️
+        </button>
+    </div>
+</div>
                         <div class="form-group">
                             <label>🎭 Rol</label>
                             <select id="newAdminRole" required>

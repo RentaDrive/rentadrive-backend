@@ -374,8 +374,18 @@ async function setExactDays() {
 }
 
 // Deactivate Subscription
+// Deactivate Subscription
 async function deactivateSubscription() {
-    if (!confirm('⚠️ ¿Seguro que deseas desactivar completamente esta suscripción?')) {
+    const reason = prompt('🚫 ¿Por qué deseas desactivar esta suscripción?\n\nEjemplos:\n• No pagó\n• Solicitó cancelación\n• Infracción de términos\n• Cambio de plan\n\nRazón:', '');
+    
+    if (reason === null) {
+        // Usuario canceló
+        return;
+    }
+    
+    const finalReason = reason.trim() || 'Sin razón especificada';
+    
+    if (!confirm(`⚠️ ¿Confirmas desactivar esta suscripción?\n\nRazón: ${finalReason}\n\nEsta acción desactivará completamente el acceso del usuario.`)) {
         return;
     }
     
@@ -386,13 +396,16 @@ async function deactivateSubscription() {
                 'Content-Type': 'application/json',
                 'Authorization': `Bearer ${token}`
             },
-            body: JSON.stringify({ userId: currentUserId, reason: 'Desactivado por admin' })
+            body: JSON.stringify({ 
+                userId: currentUserId, 
+                reason: finalReason 
+            })
         });
         
         const data = await response.json();
         
         if (data.success) {
-            showMessage('modalMessage', '✅ Suscripción desactivada completamente', 'success');
+            showMessage('modalMessage', `✅ Suscripción desactivada. ${data.daysLost ? `Días perdidos: ${data.daysLost}` : ''}`, 'success');
             setTimeout(() => {
                 closeModal();
                 loadUsers();
@@ -689,3 +702,18 @@ document.getElementById('subscriptionModal').addEventListener('click', function(
         closeModal();
     }
 });
+
+
+
+// Toggle password visibility
+function togglePasswordVisibility(inputId, button) {
+    const input = document.getElementById(inputId);
+    
+    if (input.type === 'password') {
+        input.type = 'text';
+        button.textContent = '🙈'; // Ojo cerrado
+    } else {
+        input.type = 'password';
+        button.textContent = '👁️'; // Ojo abierto
+    }
+}
