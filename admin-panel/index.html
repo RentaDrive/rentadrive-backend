@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RentaDrive - Panel Admin</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        /* Login Card */
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            max-width: 450px;
+            margin: 100px auto;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: fadeIn 0.5s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .login-card h1 {
+            color: #667eea;
+            margin-bottom: 10px;
+            text-align: center;
+            font-size: 32px;
+            font-weight: 700;
+        }
+
+        .login-card p {
+            color: #6b7280;
+            text-align: center;
+            margin-bottom: 35px;
+            font-size: 16px;
+        }
+
+        /* Dashboard */
+        .dashboard {
+            display: none;
+            animation: fadeIn 0.5s ease;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 25px 30px;
+            margin-bottom: 25px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .header h1 {
+            color: #1f2937;
+            font-size: 28px;
+            font-weight: 700;
+        }
+
+        .user-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .user-info span:first-child {
+            color: #374151;
+            font-weight: 600;
+        }
+
+        .role-badge {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 8px 18px;
+            border-radius: 25px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            box-shadow: 0 4px 10px rgba(102, 126, 234, 0.3);
+        }
+
+        .role-badge.vendedor {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            box-shadow: 0 4px 10px rgba(16, 185, 129, 0.3);
+        }
+
+        .role-badge.soporte {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            box-shadow: 0 4px 10px rgba(245, 158, 11, 0.3);
+        }
+
+        /* Stats */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: white;
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+            border-left: 4px solid #667eea;
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
+        }
+
+        .stat-card:nth-child(2) { border-left-color: #10b981; }
+        .stat-card:nth-child(3) { border-left-color: #f59e0b; }
+        .stat-card:nth-child(4) { border-left-color: #ef4444; }
+
+        .stat-card h3 {
+            color: #6b7280;
+            font-size: 14px;
+            font-weight: 600;
+            margin-bottom: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .stat-card .number {
+            font-size: 38px;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-card:nth-child(2) .number {
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card:nth-child(3) .number {
+            background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .stat-card:nth-child(4) .number {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* Tabs Container */
+        .tabs {
+            background: white;
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+
+        .tab-buttons {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+            border-bottom: 2px solid #f3f4f6;
+            padding-bottom: 15px;
+        }
+
+        .tab-btn {
+            padding: 12px 24px;
+            border: none;
+            background: transparent;
+            border-radius: 10px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            color: #6b7280;
+            position: relative;
+        }
+
+        .tab-btn:hover {
+            background: #f3f4f6;
+            color: #374151;
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+            transform: translateY(-2px);
+        }
+
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -17px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 8px solid transparent;
+            border-right: 8px solid transparent;
+            border-top: 8px solid #667eea;
+        }
+
+        .tab-content {
+            display: none;
+            animation: fadeIn 0.3s ease;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #374151;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 14px 16px;
+            border: 2px solid #e5e7eb;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s ease;
+            font-family: 'Inter', sans-serif;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 10px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        button.secondary {
+            background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+            box-shadow: 0 4px 15px rgba(107, 114, 128, 0.4);
+        }
+
+        button.danger {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.4);
+        }
+
+        /* Table */
+        .table-container {
+            overflow-x: auto;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 16px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        th:first-child {
+            border-top-left-radius: 12px;
+        }
+
+        th:last-child {
+            border-top-right-radius: 12px;
+        }
+
+        td {
+            padding: 16px;
+            border-bottom: 1px solid #f3f4f6;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        tr:hover td {
+            background: #f9fafb;
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .status-badge {
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: inline-block;
+        }
+
+        .status-badge.active {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+        }
+
+        .status-badge.inactive {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+        }
+
+        .status-badge.expired {
+            background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+            color: #92400e;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .btn-small {
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        /* Messages */
+        .message {
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            font-weight: 500;
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-20px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .message.success {
+            background: linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%);
+            color: #065f46;
+            border-left: 4px solid #10b981;
+        }
+
+        .message.error {
+            background: linear-gradient(135deg, #fee2e2 0%, #fecaca 100%);
+            color: #991b1b;
+            border-left: 4px solid #ef4444;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Loading */
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.6);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(5px);
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 35px;
+            max-width: 550px;
+            width: 90%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            animation: modalSlide 0.3s ease;
+        }
+
+        @keyframes modalSlide {
+            from { opacity: 0; transform: translateY(-50px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .modal-content h2 {
+            margin-bottom: 25px;
+            color: #1f2937;
+            font-size: 24px;
+        }
+
+        .modal-info {
+            background: #f9fafb;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 4px solid #667eea;
+        }
+
+        .modal-info p {
+            margin-bottom: 8px;
+            color: #374151;
+        }
+
+        .modal-info strong {
+            color: #1f2937;
+            font-weight: 600;
+        }
+
+        .modal-buttons {
+            display: flex;
+            gap: 12px;
+            margin-top: 25px;
+            flex-wrap: wrap;
+        }
+
+        /* Search Box */
+        .search-box {
+            background: #f9fafb;
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 25px;
+            border: 2px dashed #e5e7eb;
+        }
+
+        /* Section Titles */
+        .section-title {
+            color: #1f2937;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+            display: inline-block;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+                text-align: center;
+            }
+
+            .user-info {
+                flex-direction: column;
+            }
+
+            .action-buttons {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            .action-buttons button {
+                width: 100%;
+            }
+
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .tab-buttons {
+                flex-direction: column;
+            }
+
+            .tab-btn {
+                width: 100%;
+            }
+
+            .modal-buttons {
+                flex-direction: column;
+            }
+
+            .modal-buttons button {
+                width: 100%;
+            }
+        }
+
+        /* Scrollbar Custom */
+        ::-webkit-scrollbar {
+            width: 10px;
+            height: 10px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%);
+        }
+    </style>
+</head>
+<body>
+    <!-- Login Card -->
+    <div id="loginCard" class="login-card">
+        <h1>🚗 RentaDrive</h1>
+        <p>Panel de Administración</p>
+        
+        <div id="loginMessage"></div>
+        
+        <form id="loginForm">
+            <div class="form-group">
+                <label>📧 Email</label>
+                <input type="email" id="loginEmail" placeholder="tu@email.com" required>
+            </div>
+            <div class="form-group">
+                <label>🔒 Contraseña</label>
+                <input type="password" id="loginPassword" placeholder="••••••••" required>
+            </div>
+            <button type="submit">🚀 Iniciar Sesión</button>
+        </form>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="dashboard container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🚗 RentaDrive Admin</h1>
+            <div class="user-info">
+                <span id="adminName"></span>
+                <span id="adminRole" class="role-badge"></span>
+                <button onclick="logout()" class="btn-small secondary">🚪 Cerrar Sesión</button>
+            </div>
+        </div>
+
+        <!-- Stats -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <h3>👥 Total Usuarios</h3>
+                <div class="number" id="statTotalUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>✅ Activas</h3>
+                <div class="number" id="statActiveUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>⏸️ Inactivas</h3>
+                <div class="number" id="statInactiveUsers">-</div>
+            </div>
+            <div class="stat-card">
+                <h3>⏰ Expiradas</h3>
+                <div class="number" id="statExpiredUsers">-</div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="tabs">
+            <div class="tab-buttons">
+                <button class="tab-btn active" onclick="showTab('users')">👥 Usuarios</button>
+                <button class="tab-btn" onclick="showTab('audit')">📜 Auditoría</button>
+                <button id="adminsTabBtn" class="tab-btn hidden" onclick="showTab('admins')">👨‍💼 Administradores</button>
+            </div>
+
+            <!-- Tab: Usuarios -->
+            <div id="tabUsers" class="tab-content active">
+                <div id="usersMessage"></div>
+                
+                <div class="search-box">
+                    <h3 class="section-title">🔍 Buscar Usuario</h3>
+                    <div class="form-group">
+                        <input type="email" id="searchEmail" placeholder="Ingresa el email del usuario...">
+                    </div>
+                    <button onclick="searchUser()">🔍 Buscar</button>
+                    <button onclick="loadUsers()" class="secondary" style="margin-left: 10px;">📋 Ver Todos</button>
+                </div>
+
+                <div id="usersLoading" class="loading hidden">Cargando usuarios</div>
+                
+                <div class="table-container">
+                    <table id="usersTable">
+                        <thead>
+                            <tr>
+                                <th>📧 Email</th>
+                                <th>📦 Plan</th>
+                                <th>📊 Estado</th>
+                                <th>📅 Expira</th>
+                                <th>⏳ Días Restantes</th>
+                                <th>⚙️ Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usersTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab: Auditoría -->
+            <div id="tabAudit" class="tab-content">
+                <h3 class="section-title">📜 Historial de Acciones</h3>
+                <div id="auditMessage"></div>
+                <div id="auditLoading" class="loading hidden">Cargando historial</div>
+                
+                <div class="table-container">
+                    <table id="auditTable">
+                        <thead>
+                            <tr>
+                                <th>🕐 Fecha</th>
+                                <th>👤 Admin</th>
+                                <th>⚡ Acción</th>
+                                <th>📝 Detalles</th>
+                            </tr>
+                        </thead>
+                        <tbody id="auditTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Tab: Admins -->
+            <div id="tabAdmins" class="tab-content">
+                <div id="adminsMessage"></div>
+                
+                <div class="search-box">
+                    <h3 class="section-title">➕ Crear Nuevo Administrador</h3>
+                    <form id="createAdminForm">
+                        <div class="form-group">
+                            <label>📧 Email</label>
+                            <input type="email" id="newAdminEmail" placeholder="nuevo@admin.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label>👤 Nombre</label>
+                            <input type="text" id="newAdminName" placeholder="Nombre completo" required>
+                        </div>
+                        <div class="form-group">
+                            <label>🔒 Contraseña</label>
+                            <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" required minlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label>🎭 Rol</label>
+                            <select id="newAdminRole" required>
+                                <option value="vendedor">Vendedor</option>
+                                <option value="soporte">Soporte</option>
+                                <option value="super_admin">Super Admin</option>
+                            </select>
+                        </div>
+                        <button type="submit">➕ Crear Administrador</button>
+                    </form>
+                </div>
+
+                <h3 class="section-title">👨‍💼 Lista de Administradores</h3>
+                <div id="adminsLoading" class="loading hidden">Cargando administradores</div>
+                
+                <div class="table-container">
+                    <table id="adminsTable">
+                        <thead>
+                            <tr>
+                                <th>📧 Email</th>
+                                <th>👤 Nombre</th>
+                                <th>🎭 Rol</th>
+                                <th>📊 Estado</th>
+                                <th>🕐 Último Login</th>
+                                <th>⚙️ Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody id="adminsTableBody">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal -->
+    <div id="subscriptionModal" class="modal">
+        <div class="modal-content">
+            <h2>⚙️ Gestionar Suscripción</h2>
+            <div id="modalMessage"></div>
+            
+            <div class="modal-info">
+                <p><strong>📧 Usuario:</strong> <span id="modalUserEmail"></span></p>
+                <p><strong>📊 Estado Actual:</strong> <span id="modalUserStatus"></span></p>
+                <p><strong>📅 Expira:</strong> <span id="modalUserExpiry"></span></p>
+            </div>
+            
+            <div class="form-group">
+                <label>📅 Días a agregar/activar</label>
+                <input type="number" id="modalDays" min="1" max="365" value="30" placeholder="Ej: 30">
+            </div>
+            
+            <div class="modal-buttons">
+                <button onclick="activateSubscription()">✅ Activar/Extender</button>
+                <button onclick="deactivateSubscription()" class="danger">🚫 Desactivar</button>
+                <button onclick="closeModal()" class="secondary">❌ Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://rentadrive-backend-production.up.railway.app/api';
+        let token = localStorage.getItem('adminToken');
+        let currentAdmin = JSON.parse(localStorage.getItem('currentAdmin') || '{}');
+        let currentUserId = null;
+
+        // Check if already logged in
+        if (token && currentAdmin.email) {
+            document.getElementById('loginCard').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            initDashboard();
+        }
+
+        // Login
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const email = document.getElementById('loginEmail').value;
+            const password = document.getElementById('loginPassword').value;
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    token = data.token;
+                    currentAdmin = data.admin;
+                    
+                    localStorage.setItem('adminToken', token);
+                    localStorage.setItem('currentAdmin', JSON.stringify(currentAdmin));
+                    
+                    document.getElementById('loginCard').style.display = 'none';
+                    document.getElementById('dashboard').style.display = 'block';
+                    
+                    initDashboard();
+                } else {
+                    showMessage('loginMessage', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('loginMessage', 'Error de conexión con el servidor', 'error');
+            }
+        });
+
+        // Initialize Dashboard
+        async function initDashboard() {
+            document.getElementById('adminName').textContent = currentAdmin.name;
+            document.getElementById('adminRole').textContent = currentAdmin.role;
+            document.getElementById('adminRole').className = `role-badge ${currentAdmin.role}`;
+            
+            if (currentAdmin.role === 'super_admin') {
+                document.getElementById('adminsTabBtn').classList.remove('hidden');
+            }
+            
+            await loadStats();
+            await loadUsers();
+        }
+
+        // Logout
+        function logout() {
+            if (confirm('¿Seguro que deseas cerrar sesión?')) {
+                localStorage.removeItem('adminToken');
+                localStorage.removeItem('currentAdmin');
+                location.reload();
+            }
+        }
+
+        // Load Stats
+        async function loadStats() {
+            try {
+                const response = await fetch(`${API_URL}/admin/stats`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('statTotalUsers').textContent = data.stats.totalUsers;
+                    document.getElementById('statActiveUsers').textContent = data.stats.activeSubscriptions;
+                    document.getElementById('statInactiveUsers').textContent = data.stats.inactiveSubscriptions;
+                    document.getElementById('statExpiredUsers').textContent = data.stats.expiredSubscriptions;
+                }
+            } catch (error) {
+                console.error('Error loading stats:', error);
+            }
+        }
+
+        // Load Users
+        async function loadUsers() {
+            document.getElementById('usersLoading').classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/users`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayUsers(data.users);
+                } else {
+                    showMessage('usersMessage', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('usersMessage', 'Error cargando usuarios', 'error');
+            } finally {
+                document.getElementById('usersLoading').classList.add('hidden');
+            }
+        }
+
+        // Search User
+        async function searchUser() {
+            const email = document.getElementById('searchEmail').value.trim();
+            
+            if (!email) {
+                showMessage('usersMessage', '📧 Por favor ingresa un email', 'error');
+                return;
+            }
+            
+            document.getElementById('usersLoading').classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/search-user?email=${encodeURIComponent(email)}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayUsers([data.user]);
+                    showMessage('usersMessage', '✅ Usuario encontrado', 'success');
+                } else {
+                    showMessage('usersMessage', '❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('usersMessage', '❌ Error buscando usuario', 'error');
+            } finally {
+                document.getElementById('usersLoading').classList.add('hidden');
+            }
+        }
+
+        // Display Users
+        function displayUsers(users) {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = '';
+            
+            if (users.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:#6b7280;">No hay usuarios para mostrar</td></tr>';
+                return;
+            }
+            
+            users.forEach(user => {
+                const expiry = user.subscriptionExpiry ? new Date(user.subscriptionExpiry) : null;
+                const now = new Date();
+                const daysLeft = expiry ? Math.floor((expiry - now) / (1000 * 60 * 60 * 24)) : 0;
+                
+                let statusBadge = '';
+                if (user.subscriptionActive && daysLeft > 0) {
+                    statusBadge = '<span class="status-badge active">✅ Activa</span>';
+                } else if (user.subscriptionActive && daysLeft <= 0) {
+                    statusBadge = '<span class="status-badge expired">⏰ Expirada</span>';
+                } else {
+                    statusBadge = '<span class="status-badge inactive">❌ Inactiva</span>';
+                }
+                
+                const canManage = currentAdmin.role === 'super_admin' || currentAdmin.role === 'vendedor';
+                
+                const row = `
+                    <tr>
+                        <td>${user.email}</td>
+                        <td><strong>${user.plan || 'none'}</strong></td>
+                        <td>${statusBadge}</td>
+                        <td>${expiry ? expiry.toLocaleDateString('es-MX') : 'N/A'}</td>
+                        <td><strong>${daysLeft > 0 ? daysLeft + ' días' : '-'}</strong></td>
+                        <td>
+                            ${canManage ? `<button onclick="openModal('${user.userId}', '${user.email}', ${user.subscriptionActive}, '${user.subscriptionExpiry}')" class="btn-small">⚙️ Gestionar</button>` : '<span style="color:#9ca3af;">Sin permisos</span>'}
+                        </td>
+                    </tr>
+                `;
+                tbody.innerHTML += row;
+            });
+        }
+
+        // Open Modal
+        function openModal(userId, email, isActive, expiry) {
+            currentUserId = userId;
+            document.getElementById('modalUserEmail').textContent = email;
+            document.getElementById('modalUserStatus').textContent = isActive ? '✅ Activa' : '❌ Inactiva';
+            document.getElementById('modalUserExpiry').textContent = expiry && expiry !== 'null' ? new Date(expiry).toLocaleDateString('es-MX') : 'N/A';
+            document.getElementById('subscriptionModal').style.display = 'flex';
+        }
+
+        // Close Modal
+        function closeModal() {
+            document.getElementById('subscriptionModal').style.display = 'none';
+            document.getElementById('modalMessage').innerHTML = '';
+            document.getElementById('modalDays').value = '30';
+            currentUserId = null;
+        }
+
+        // Activate/Extend Subscription
+        async function activateSubscription() {
+            const days = parseInt(document.getElementById('modalDays').value);
+            
+            if (!days || days < 1 || days > 365) {
+                showMessage('modalMessage', '📅 Ingresa días válidos (1-365)', 'error');
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/activate-subscription`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ userId: currentUserId, days })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('modalMessage', '✅ ' + data.message, 'success');
+                    setTimeout(() => {
+                        closeModal();
+                        loadUsers();
+                        loadStats();
+                    }, 1500);
+                } else {
+                    showMessage('modalMessage', '❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('modalMessage', '❌ Error de conexión', 'error');
+            }
+        }
+
+        // Deactivate Subscription
+        async function deactivateSubscription() {
+            if (!confirm('⚠️ ¿Seguro que deseas desactivar esta suscripción?')) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/deactivate-subscription`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ userId: currentUserId, reason: 'Desactivado por admin' })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('modalMessage', '✅ ' + data.message, 'success');
+                    setTimeout(() => {
+                        closeModal();
+                        loadUsers();
+                        loadStats();
+                    }, 1500);
+                } else {
+                    showMessage('modalMessage', '❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('modalMessage', '❌ Error de conexión', 'error');
+            }
+        }
+
+        // Load Audit Logs
+        async function loadAuditLogs() {
+            document.getElementById('auditLoading').classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/audit-logs?limit=50`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('auditTableBody');
+                    tbody.innerHTML = '';
+                    
+                    if (data.logs.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding:40px; color:#6b7280;">No hay registros de auditoría</td></tr>';
+                        return;
+                    }
+                    
+                    data.logs.forEach(log => {
+                        const date = new Date(log.timestamp).toLocaleString('es-MX');
+                        const details = JSON.stringify(log.details, null, 2);
+                        
+                        const row = `
+                            <tr>
+                                <td>${date}</td>
+                                <td><strong>${log.adminName || log.adminEmail}</strong></td>
+                                <td><span style="background:#f3f4f6; padding:4px 10px; border-radius:6px; font-size:12px; font-weight:600;">${log.action}</span></td>
+                                <td><pre style="font-size:11px; max-width:300px; overflow:auto; background:#f9fafb; padding:10px; border-radius:6px;">${details}</pre></td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    showMessage('auditMessage', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('auditMessage', 'Error cargando auditoría', 'error');
+            } finally {
+                document.getElementById('auditLoading').classList.add('hidden');
+            }
+        }
+
+        // Load Admins
+        async function loadAdmins() {
+            if (currentAdmin.role !== 'super_admin') return;
+            
+            document.getElementById('adminsLoading').classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/list-admins`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    const tbody = document.getElementById('adminsTableBody');
+                    tbody.innerHTML = '';
+                    
+                    data.admins.forEach(admin => {
+                        const lastLogin = admin.lastLogin ? new Date(admin.lastLogin).toLocaleString('es-MX') : 'Nunca';
+                        const statusBadge = admin.active ? 
+                            '<span class="status-badge active">✅ Activo</span>' : 
+                            '<span class="status-badge inactive">❌ Inactivo</span>';
+                        
+                        const isCurrentUser = admin.id === currentAdmin.id;
+                        
+                        const row = `
+                            <tr>
+                                <td>${admin.email}</td>
+                                <td><strong>${admin.name}</strong></td>
+                                <td><span class="role-badge ${admin.role}">${admin.role}</span></td>
+                                <td>${statusBadge}</td>
+                                <td>${lastLogin}</td>
+                                <td>
+                                    ${!isCurrentUser ? `
+                                        <div class="action-buttons">
+                                            ${admin.active ? 
+                                                `<button onclick="toggleAdminStatus('${admin.id}', false, '${admin.email}')" class="btn-small danger">🚫 Desactivar</button>` : 
+                                                `<button onclick="toggleAdminStatus('${admin.id}', true, '${admin.email}')" class="btn-small">✅ Activar</button>`
+                                            }
+                                            <button onclick="openChangeRoleModal('${admin.id}', '${admin.email}', '${admin.role}')" class="btn-small secondary">🎭 Cambiar Rol</button>
+                                            <button onclick="deleteAdmin('${admin.id}', '${admin.email}')" class="btn-small danger">🗑️ Eliminar</button>
+                                        </div>
+                                    ` : '<span style="color:#9ca3af; font-style:italic;">Tú mismo</span>'}
+                                </td>
+                            </tr>
+                        `;
+                        tbody.innerHTML += row;
+                    });
+                } else {
+                    showMessage('adminsMessage', data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('adminsMessage', 'Error cargando admins', 'error');
+            } finally {
+                document.getElementById('adminsLoading').classList.add('hidden');
+            }
+        }
+
+        // Toggle Admin Status
+        async function toggleAdminStatus(adminId, activate, email) {
+            const action = activate ? 'activar' : 'desactivar';
+            if (!confirm(`¿Seguro que deseas ${action} a ${email}?`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/toggle-admin-status`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ adminId, active: activate })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('adminsMessage', `✅ ${data.message}`, 'success');
+                    loadAdmins();
+                } else {
+                    showMessage('adminsMessage', `❌ ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage('adminsMessage', '❌ Error de conexión', 'error');
+            }
+        }
+
+        // Delete Admin
+        async function deleteAdmin(adminId, email) {
+            if (!confirm(`⚠️ ¿ESTÁS SEGURO que deseas ELIMINAR PERMANENTEMENTE a ${email}?\n\nEsta acción NO se puede deshacer.`)) {
+                return;
+            }
+            
+            if (!confirm(`🚨 ÚLTIMA CONFIRMACIÓN: Se eliminará completamente a ${email}`)) {
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/delete-admin/${adminId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('adminsMessage', `✅ ${data.message}`, 'success');
+                    loadAdmins();
+                } else {
+                    showMessage('adminsMessage', `❌ ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage('adminsMessage', '❌ Error de conexión', 'error');
+            }
+        }
+
+        // Open Change Role Modal
+        function openChangeRoleModal(adminId, email, currentRole) {
+            const newRole = prompt(`Cambiar rol de ${email}\n\nRol actual: ${currentRole}\n\nNuevo rol (super_admin, vendedor, soporte):`, currentRole);
+            
+            if (!newRole || newRole === currentRole) {
+                return;
+            }
+            
+            const validRoles = ['super_admin', 'vendedor', 'soporte'];
+            if (!validRoles.includes(newRole)) {
+                alert('❌ Rol inválido. Debe ser: super_admin, vendedor o soporte');
+                return;
+            }
+            
+            changeAdminRole(adminId, newRole);
+        }
+
+        // Change Admin Role
+        async function changeAdminRole(adminId, newRole) {
+            try {
+                const response = await fetch(`${API_URL}/admin/change-role`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ adminId, newRole })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('adminsMessage', `✅ ${data.message}`, 'success');
+                    loadAdmins();
+                } else {
+                    showMessage('adminsMessage', `❌ ${data.message}`, 'error');
+                }
+            } catch (error) {
+                showMessage('adminsMessage', '❌ Error de conexión', 'error');
+            }
+        }
+
+        // Create Admin
+        document.getElementById('createAdminForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const newAdmin = {
+                email: document.getElementById('newAdminEmail').value,
+                name: document.getElementById('newAdminName').value,
+                password: document.getElementById('newAdminPassword').value,
+                role: document.getElementById('newAdminRole').value
+            };
+            
+            try {
+                const response = await fetch(`${API_URL}/admin/create-admin`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify(newAdmin)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showMessage('adminsMessage', '✅ Admin creado exitosamente', 'success');
+                    document.getElementById('createAdminForm').reset();
+                    loadAdmins();
+                } else {
+                    showMessage('adminsMessage', '❌ ' + data.message, 'error');
+                }
+            } catch (error) {
+                showMessage('adminsMessage', '❌ Error de conexión', 'error');
+            }
+        });
+
+        // Show Tab
+        function showTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`tab${tabName.charAt(0).toUpperCase() + tabName.slice(1)}`).classList.add('active');
+            
+            if (tabName === 'audit') {
+                loadAuditLogs();
+            } else if (tabName === 'admins') {
+                loadAdmins();
+            }
+        }
+
+        // Show Message
+        function showMessage(elementId, message, type) {
+            const element = document.getElementById(elementId);
+            element.className = `message ${type}`;
+            element.textContent = message;
+            element.style.display = 'block';
+            
+            setTimeout(() => {
+                element.style.display = 'none';
+            }, 5000);
+        }
+
+        // Close modal on outside click
+        document.getElementById('subscriptionModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeModal();
+            }
+        });
+    </script>
+</body>
+</html>

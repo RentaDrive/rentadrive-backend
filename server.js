@@ -35,6 +35,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+// Servir el panel de administración
+app.use('/admin', express.static('admin-panel'));
+
 // Rate limiting general
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
@@ -983,6 +987,207 @@ app.get('/api/admin/search-user', authenticateAdmin, async (req, res) => {
       success: false, 
       message: 'Error del servidor' 
     });
+  }
+});
+
+
+// ============================================
+// ENDPOINT: DESACTIVAR/ACTIVAR ADMIN (solo super_admin)
+// ============================================
+app.post('/api/admin/toggle-admin-status', authenticateAdmin, requireRole('super_admin'), async (req, res) => {
+  try {
+    const { adminId, active } = req.body;
+    
+    if (!adminId || typeof active !== 'boolean') {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'adminId y active (boolean) son requeridos' 
+      });
+    }
+    
+    // No permitir desactivarse a sí mismo
+    if (adminId === req.admin.adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No puedes desactivarte a ti mismo' 
+      });
+    }
+    
+    // Verificar que el admin existe
+    const adminDoc = await db.collection('admins').doc(adminId).get();
+    
+    if (!adminDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin no encontrado' 
+      });
+    }
+    
+    await db.collection('admins').doc(adminId).update({
+      active: active,
+      modifiedBy: req.admin.email,
+      modifiedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Registrar en audit log
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: active ? 'activate_admin' : 'deactivate_admin',
+      targetAdminId: adminId,
+      targetAdminEmail: adminDoc.data().email,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`✅ Admin ${active ? 'activado' : 'desactivado'}: ${adminId} por ${req.admin.email}`);
+    
+    res.json({
+      success: true,
+      message: `Admin ${active ? 'activado' : 'desactivado'} exitosamente`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ success: false, message: 'Error del servidor' });
+  }
+});
+
+// ============================================
+// ENDPOINT: ELIMINAR ADMIN PERMANENTEMENTE (solo super_admin)
+// ============================================
+app.delete('/api/admin/delete-admin/:adminId', authenticateAdmin, requireRole('super_admin'), async (req, res) => {
+  try {
+    const { adminId } = req.params;
+    
+    if (!adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'adminId es requerido' 
+      });
+    }
+    
+    // No permitir eliminarse a sí mismo
+    if (adminId === req.admin.adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No puedes eliminarte a ti mismo' 
+      });
+    }
+    
+    // Verificar que el admin existe
+    const adminDoc = await db.collection('admins').doc(adminId).get();
+    
+    if (!adminDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin no encontrado' 
+      });
+    }
+    
+    const adminData = adminDoc.data();
+    
+    // Eliminar el admin
+    await db.collection('admins').doc(adminId).delete();
+    
+    // Registrar en audit log
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: 'delete_admin',
+      targetAdminId: adminId,
+      targetAdminEmail: adminData.email,
+      targetAdminName: adminData.name,
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`🗑️ Admin eliminado: ${adminData.email} por ${req.admin.email}`);
+    
+    res.json({
+      success: true,
+      message: `Admin ${adminData.email} eliminado permanentemente`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ success: false, message: 'Error del servidor' });
+  }
+});
+
+// ============================================
+// ENDPOINT: CAMBIAR ROL DE ADMIN (solo super_admin)
+// ============================================
+app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin'), async (req, res) => {
+  try {
+    const { adminId, newRole } = req.body;
+    
+    if (!adminId || !newRole) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'adminId y newRole son requeridos' 
+      });
+    }
+    
+    // Validar roles permitidos
+    const validRoles = ['super_admin', 'vendedor', 'soporte'];
+    if (!validRoles.includes(newRole)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Rol inválido. Roles permitidos: ${validRoles.join(', ')}` 
+      });
+    }
+    
+    // No permitir cambiar su propio rol
+    if (adminId === req.admin.adminId) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'No puedes cambiar tu propio rol' 
+      });
+    }
+    
+    const adminDoc = await db.collection('admins').doc(adminId).get();
+    
+    if (!adminDoc.exists) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Admin no encontrado' 
+      });
+    }
+    
+    const oldRole = adminDoc.data().role;
+    
+    await db.collection('admins').doc(adminId).update({
+      role: newRole,
+      modifiedBy: req.admin.email,
+      modifiedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    // Registrar en audit log
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: 'change_admin_role',
+      targetAdminId: adminId,
+      targetAdminEmail: adminDoc.data().email,
+      details: {
+        oldRole: oldRole,
+        newRole: newRole
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+    
+    console.log(`✅ Rol cambiado: ${adminDoc.data().email} de ${oldRole} a ${newRole}`);
+    
+    res.json({
+      success: true,
+      message: `Rol cambiado de ${oldRole} a ${newRole}`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error:', error);
+    res.status(500).json({ success: false, message: 'Error del servidor' });
   }
 });
 
