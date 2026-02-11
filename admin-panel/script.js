@@ -717,3 +717,11 @@ function togglePasswordVisibility(inputId, button) {
         button.textContent = '👁️'; // Ojo abierto
     }
 }
+
+
+// Close modal on outside click
+document.getElementById('subscriptionModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        closeModal();
+    }
+});
