@@ -414,7 +414,6 @@ app.post('/api/admin/login',
       .normalizeEmail()
       .isLength({ max: 100 }).withMessage('Email muy largo'),
     body('password')
-      .trim()
       .isLength({ min: 6, max: 100 }).withMessage('Contraseña debe tener entre 6-100 caracteres')
   ],
   async (req, res) => {
