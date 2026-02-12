@@ -227,8 +227,10 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ============================================
-// ENDPOINT: LOGIN DE USUARIO (CORREGIDO)
+// ENDPOINT: LOGIN DE USUARIO (SOLUCIÓN SIMPLE)
 // ============================================
+// Reemplazar el endpoint /api/login en server.js con este código
+
 app.post('/api/login', async (req, res) => {
   try {
     const { email, password, deviceId } = req.body;
@@ -242,52 +244,62 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
-    // ✅ VALIDAR CONTRASEÑA CON FIREBASE AUTH
+    // PASO 1: Verificar que el usuario existe en Firebase Auth
     let userRecord;
     try {
-      // Intentar autenticar con Firebase Admin
-      // Nota: Firebase Admin SDK no tiene método directo para validar contraseña
-      // Tenemos que usar signInWithEmailAndPassword del cliente o verificar con custom token
-      
-      // Verificar que el usuario existe
       userRecord = await admin.auth().getUserByEmail(email);
-      
-      // IMPORTANTE: Firebase Admin NO puede validar contraseñas directamente
-      // Necesitamos usar el REST API de Firebase Authentication
-      const firebaseAuthUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_API_KEY}`;
-      
-      const authResponse = await fetch(firebaseAuthUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: email,
-          password: password,
-          returnSecureToken: true
-        })
-      });
-      
-      const authData = await authResponse.json();
-      
-      if (!authResponse.ok || authData.error) {
-        console.log('⚠️ Contraseña incorrecta:', authData.error?.message);
-        return res.status(401).json({ 
-          success: false, 
-          message: 'Credenciales incorrectas' 
-        });
-      }
-      
-      console.log('✅ Contraseña verificada correctamente');
-      
     } catch (error) {
-      console.log('⚠️ Error en autenticación:', error.message);
+      console.log('⚠️ Email no encontrado');
       return res.status(401).json({ 
         success: false, 
         message: 'Credenciales incorrectas' 
       });
     }
     
+    // PASO 2: Validar la contraseña usando Firebase Auth REST API
+    // Necesitamos hacer esto porque Firebase Admin SDK no puede validar contraseñas
+    try {
+      const axios = require('axios');
+      
+      // Usar la Web API Key de tu proyecto Firebase
+      // Puedes obtenerla de: Firebase Console > Project Settings > Web API Key
+      const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY || 'AIzaSyBkxdBULV8gywlE1nrvBqZ3tG-tDJOFAmI';
+      
+      const authResponse = await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+        {
+          email: email,
+          password: password,
+          returnSecureToken: true
+        }
+      );
+      
+      console.log('✅ Contraseña válida');
+      
+    } catch (error) {
+      // Error de autenticación = contraseña incorrecta
+      if (error.response?.data?.error?.message) {
+        const errorMsg = error.response.data.error.message;
+        console.log('⚠️ Error de autenticación:', errorMsg);
+        
+        // Errores comunes de Firebase Auth
+        if (errorMsg.includes('INVALID_PASSWORD') || 
+            errorMsg.includes('INVALID_LOGIN_CREDENTIALS')) {
+          return res.status(401).json({ 
+            success: false, 
+            message: 'Credenciales incorrectas' 
+          });
+        }
+      }
+      
+      console.log('⚠️ Error validando contraseña:', error.message);
+      return res.status(401).json({ 
+        success: false, 
+        message: 'Credenciales incorrectas' 
+      });
+    }
+    
+    // PASO 3: Verificar documento en Firestore
     const userDoc = await db.collection('users').doc(userRecord.uid).get();
     
     if (!userDoc.exists) {
@@ -300,6 +312,7 @@ app.post('/api/login', async (req, res) => {
     
     const userData = userDoc.data();
     
+    // PASO 4: Verificar dispositivo
     if (userData.deviceId && userData.deviceId !== deviceId) {
       console.log('⚠️ Dispositivo no autorizado');
       
@@ -318,6 +331,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // Registrar dispositivo si es primera vez
     if (!userData.deviceId) {
       await db.collection('users').doc(userRecord.uid).update({ 
         deviceId,
@@ -326,6 +340,7 @@ app.post('/api/login', async (req, res) => {
       console.log('✅ Dispositivo registrado');
     }
     
+    // PASO 5: Verificar suscripción
     const isActive = userData.subscriptionActive === true;
     const expiry = userData.subscriptionExpiry?.toMillis() || 0;
     const now = Date.now();
@@ -339,6 +354,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // PASO 6: Login exitoso
     const daysLeft = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
     console.log(`✅ Login exitoso - ${daysLeft} días`);
     
