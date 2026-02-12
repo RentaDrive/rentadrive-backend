@@ -227,7 +227,7 @@ app.post('/api/register', async (req, res) => {
 });
 
 // ============================================
-// ENDPOINT: LOGIN DE USUARIO
+// ENDPOINT: LOGIN DE USUARIO (CORREGIDO)
 // ============================================
 app.post('/api/login', async (req, res) => {
   try {
@@ -242,10 +242,46 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // ✅ VALIDAR CONTRASEÑA CON FIREBASE AUTH
     let userRecord;
     try {
+      // Intentar autenticar con Firebase Admin
+      // Nota: Firebase Admin SDK no tiene método directo para validar contraseña
+      // Tenemos que usar signInWithEmailAndPassword del cliente o verificar con custom token
+      
+      // Verificar que el usuario existe
       userRecord = await admin.auth().getUserByEmail(email);
+      
+      // IMPORTANTE: Firebase Admin NO puede validar contraseñas directamente
+      // Necesitamos usar el REST API de Firebase Authentication
+      const firebaseAuthUrl = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${process.env.FIREBASE_API_KEY}`;
+      
+      const authResponse = await fetch(firebaseAuthUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: email,
+          password: password,
+          returnSecureToken: true
+        })
+      });
+      
+      const authData = await authResponse.json();
+      
+      if (!authResponse.ok || authData.error) {
+        console.log('⚠️ Contraseña incorrecta:', authData.error?.message);
+        return res.status(401).json({ 
+          success: false, 
+          message: 'Credenciales incorrectas' 
+        });
+      }
+      
+      console.log('✅ Contraseña verificada correctamente');
+      
     } catch (error) {
+      console.log('⚠️ Error en autenticación:', error.message);
       return res.status(401).json({ 
         success: false, 
         message: 'Credenciales incorrectas' 
@@ -257,7 +293,8 @@ app.post('/api/login', async (req, res) => {
     if (!userDoc.exists) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Usuario sin suscripción activa' 
+        message: 'Usuario sin suscripción activa',
+        userId: userRecord.uid
       });
     }
     
