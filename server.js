@@ -242,27 +242,91 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // PASO 1: Verificar que el usuario existe en Firebase Auth
     let userRecord;
     try {
       userRecord = await admin.auth().getUserByEmail(email);
     } catch (error) {
+      console.log('⚠️ Email no encontrado');
       return res.status(401).json({ 
         success: false, 
         message: 'Credenciales incorrectas' 
       });
     }
     
+    // PASO 2: Validar la contraseña usando Firebase Auth REST API
+    const axios = require('axios');
+    const FIREBASE_API_KEY = process.env.FIREBASE_API_KEY;
+    
+    if (!FIREBASE_API_KEY) {
+      console.error('❌ FIREBASE_API_KEY no configurada');
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error de configuración del servidor' 
+      });
+    }
+    
+    try {
+      console.log('🔍 Validando contraseña...');
+      
+      await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${FIREBASE_API_KEY}`,
+        {
+          email: email,
+          password: password,
+          returnSecureToken: true
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000
+        }
+      );
+      
+      console.log('✅ Contraseña válida');
+      
+    } catch (error) {
+      if (error.response?.data?.error?.message) {
+        const errorCode = error.response.data.error.message;
+        console.log('⚠️ Firebase Auth error:', errorCode);
+        
+        if (errorCode === 'INVALID_PASSWORD' || 
+            errorCode === 'INVALID_LOGIN_CREDENTIALS' ||
+            errorCode === 'EMAIL_NOT_FOUND') {
+          return res.status(401).json({ 
+            success: false, 
+            message: 'Credenciales incorrectas' 
+          });
+        }
+        
+        if (errorCode === 'USER_DISABLED') {
+          return res.status(403).json({ 
+            success: false, 
+            message: 'Cuenta deshabilitada' 
+          });
+        }
+      }
+      
+      console.error('❌ Error validando contraseña:', error.message);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Error al validar credenciales' 
+      });
+    }
+    
+    // PASO 3: Verificar documento en Firestore
     const userDoc = await db.collection('users').doc(userRecord.uid).get();
     
     if (!userDoc.exists) {
       return res.status(401).json({ 
         success: false, 
-        message: 'Usuario sin suscripción activa' 
+        message: 'Usuario sin suscripción activa',
+        userId: userRecord.uid
       });
     }
     
     const userData = userDoc.data();
     
+    // PASO 4: Verificar dispositivo
     if (userData.deviceId && userData.deviceId !== deviceId) {
       console.log('⚠️ Dispositivo no autorizado');
       
@@ -281,6 +345,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // Registrar dispositivo si es primera vez
     if (!userData.deviceId) {
       await db.collection('users').doc(userRecord.uid).update({ 
         deviceId,
@@ -289,6 +354,7 @@ app.post('/api/login', async (req, res) => {
       console.log('✅ Dispositivo registrado');
     }
     
+    // PASO 5: Verificar suscripción
     const isActive = userData.subscriptionActive === true;
     const expiry = userData.subscriptionExpiry?.toMillis() || 0;
     const now = Date.now();
@@ -302,6 +368,7 @@ app.post('/api/login', async (req, res) => {
       });
     }
     
+    // PASO 6: Login exitoso
     const daysLeft = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
     console.log(`✅ Login exitoso - ${daysLeft} días`);
     
@@ -328,6 +395,7 @@ app.post('/api/login', async (req, res) => {
     });
   }
 });
+
 
 // ============================================
 // ENDPOINT: VALIDAR LICENCIA
