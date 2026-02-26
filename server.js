@@ -1131,16 +1131,21 @@ app.get('/api/admin/audit-logs', authenticateAdmin, async (req, res) => {
     const logs = [];
     logsSnapshot.forEach(doc => {
       const data = doc.data();
-      logs.push({
-        id: doc.id,
-        adminEmail: data.adminEmail,
-        adminName: data.adminName,
-        action: data.action,
-        userId: data.userId,
-        targetEmail: data.targetEmail,
-        details: data.details,
-        timestamp: data.timestamp?.toDate().toISOString()
-      });
+      // DESPUÉS - agrega userEmail, adminId y campos de admin target
+logs.push({
+    id: doc.id,
+    adminId: data.adminId,
+    adminEmail: data.adminEmail,
+    adminName: data.adminName,
+    action: data.action,
+    userId: data.userId,
+    userEmail: data.userEmail,           // ← ESTE ERA EL QUE FALTABA
+    targetEmail: data.targetEmail,
+    targetAdminEmail: data.targetAdminEmail,  // para acciones sobre admins
+    targetAdminName: data.targetAdminName,
+    details: data.details,
+    timestamp: data.timestamp?.toDate().toISOString()
+});
     });
     
     res.json({
