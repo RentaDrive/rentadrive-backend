@@ -354,19 +354,32 @@ app.post('/api/login', async (req, res) => {
       console.log('✅ Dispositivo registrado');
     }
     
-    // PASO 5: Verificar suscripción
-    const isActive = userData.subscriptionActive === true;
-    const expiry = userData.subscriptionExpiry?.toMillis() || 0;
-    const now = Date.now();
-    const isValid = isActive && now < expiry;
-    
-    if (!isValid) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Suscripción expirada o inactiva',
-        expiry 
-      });
-    }
+    // PASO 5: Verificar suscripción usando fecha, y actualizar Firestore si ya expiró
+const now = Date.now();
+const expiry = userData.subscriptionExpiry?.toMillis() || 0;
+let isActive = userData.subscriptionActive === true;
+let isValid = isActive && now < expiry;
+
+if (!expiry || now >= expiry) {
+  // Ya expiró o no tiene fecha: marcar como inactiva en Firestore
+  if (isActive) {
+    await db.collection('users').doc(userRecord.uid).update({
+      subscriptionActive: false,
+      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastModifiedBy: 'SYSTEM_AUTO_EXPIRY_LOGIN'
+    });
+    isActive = false;
+    isValid = false;
+  }
+}
+
+if (!isValid) {
+  return res.status(403).json({ 
+    success: false, 
+    message: 'Suscripción expirada o inactiva',
+    expiry 
+  });
+}
     
     // PASO 6: Login exitoso
     const daysLeft = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
@@ -446,25 +459,39 @@ app.post('/api/validate', async (req, res) => {
       });
     }
     
-    const isActive = userData.subscriptionActive === true;
-    const expiry = userData.subscriptionExpiry?.toMillis() || 0;
     const now = Date.now();
-    const isValid = isActive && now < expiry;
-    const daysLeft = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
-    
+const expiry = userData.subscriptionExpiry?.toMillis() || 0;
+let isActive = userData.subscriptionActive === true;
+let isValid = isActive && now < expiry;
+
+// Si ya no tiene fecha o la fecha ya pasó, marcar como inactiva
+if (!expiry || now >= expiry) {
+  if (isActive) {
     await db.collection('users').doc(userId).update({
-      lastValidation: admin.firestore.FieldValue.serverTimestamp(),
-      validationCount: admin.firestore.FieldValue.increment(1)
+      subscriptionActive: false,
+      lastModifiedAt: admin.firestore.FieldValue.serverTimestamp(),
+      lastModifiedBy: 'SYSTEM_AUTO_EXPIRY_VALIDATE'
     });
-    
-    console.log(`${isValid ? '✅' : '⚠️'} ${isValid ? 'Válida' : 'Expirada'}`);
-    
-    res.json({
-      valid: isValid,
-      expiry,
-      daysLeft: Math.max(0, daysLeft),
-      message: isValid ? 'Licencia válida' : 'Licencia expirada'
-    });
+    isActive = false;
+    isValid = false;
+  }
+}
+
+const daysLeft = Math.floor((expiry - now) / (1000 * 60 * 60 * 24));
+
+await db.collection('users').doc(userId).update({
+  lastValidation: admin.firestore.FieldValue.serverTimestamp(),
+  validationCount: admin.firestore.FieldValue.increment(1)
+});
+
+console.log(`${isValid ? '✅' : '⚠️'} ${isValid ? 'Válida' : 'Expirada'}`);
+
+res.json({
+  valid: isValid,
+  expiry,
+  daysLeft: Math.max(0, daysLeft),
+  message: isValid ? 'Licencia válida' : 'Licencia expirada'
+});
     
   } catch (error) {
     console.error('❌ Error:', error);
