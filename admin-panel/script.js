@@ -486,7 +486,7 @@ async function loadAuditLogs() {
                             </span>
                         </td>
                         <td style="font-size:13px;">${userEmail}</td>
-                        <td class="hide-mobile" style="font-size:11px; color:#9ca3af; word-break:break-all; max-width:100px;">${userId}</td>
+                        <td class="hide-mobile" style="font-size:13px;">${userEmail}</td>
                         <td class="hide-mobile">
                             <pre style="font-size:10px; max-width:250px; overflow:auto; background:#f9fafb; padding:8px; border-radius:6px; margin:0; max-height:100px;">${details}</pre>
                         </td>
