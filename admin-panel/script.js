@@ -476,35 +476,59 @@ async function loadAuditLogs() {
             }
 
             data.logs.forEach(log => {
+                // Fecha
                 const date = log.timestamp
                     ? new Date(log.timestamp).toLocaleString('es-MX', {
                         day: '2-digit', month: '2-digit',
                         hour: '2-digit', minute: '2-digit'
                     }) : '-';
 
+                // Admin
                 const adminLabel = log.adminName
                     ? `<strong>${log.adminName}</strong><br><small style="color:#6b7280;">${log.adminEmail || ''}</small>`
                     : (log.adminEmail || '-');
 
-                // Email del usuario afectado
-                const userEmail = log.userEmail || log.targetEmail || '-';
+                // ✅ Email del usuario afectado — lee de varias posibles ubicaciones
+                const userEmail =
+                    log.userEmail ||
+                    log.targetEmail ||
+                    log.details?.userEmail ||
+                    log.details?.email ||
+                    '-';
 
                 // Color por tipo de acción
                 let actionBg = '#f3f4f6', actionColor = '#374151';
                 const action = log.action || '';
                 if (action.includes('DESACTIVAR') || action.includes('deactivate')) {
                     actionBg = '#fee2e2'; actionColor = '#dc2626';
-                } else if (action.includes('AGREGAR') || action.includes('extend')) {
+                } else if (action.includes('AGREGAR') || action.includes('extend') || action.includes('add_days')) {
                     actionBg = '#d1fae5'; actionColor = '#059669';
-                } else if (action.includes('ESTABLECER') || action.includes('activate')) {
+                } else if (action.includes('ESTABLECER') || action.includes('activate') || action.includes('set_days')) {
                     actionBg = '#dbeafe'; actionColor = '#2563eb';
+                } else if (action.includes('QUITAR') || action.includes('remove_days')) {
+                    actionBg = '#fef3c7'; actionColor = '#d97706';
                 } else if (action.includes('delete') || action.includes('eliminar')) {
                     actionBg = '#fce7f3'; actionColor = '#db2777';
                 } else if (action.includes('create') || action.includes('crear')) {
-                    actionBg = '#fef3c7'; actionColor = '#d97706';
+                    actionBg = '#ede9fe'; actionColor = '#7c3aed';
                 }
 
-                const details = log.details ? JSON.stringify(log.details, null, 2) : '-';
+                // Detalles — muestra campos legibles en lugar del JSON crudo
+                let detailsHtml = '-';
+                if (log.details) {
+                    const d = log.details;
+                    const lines = [];
+                    if (d.daysAdded)     lines.push(`➕ +${d.daysAdded} días`);
+                    if (d.daysRemoved)   lines.push(`➖ -${d.daysRemoved} días`);
+                    if (d.newDaysTotal !== undefined) lines.push(`📅 Total: ${d.newDaysTotal} días`);
+                    if (d.description)   lines.push(`📝 ${d.description}`);
+                    if (d.reason)        lines.push(`💬 ${d.reason}`);
+                    if (d.newExpiry)     lines.push(`🗓️ Expira: ${new Date(d.newExpiry).toLocaleDateString('es-MX')}`);
+
+                    detailsHtml = lines.length > 0
+                        ? `<div class="audit-details">${lines.join('<br>')}</div>`
+                        : `<pre style="font-size:10px; max-width:220px; overflow:auto; background:#f9fafb; padding:6px; border-radius:6px; margin:0; max-height:80px;">${JSON.stringify(log.details, null, 2)}</pre>`;
+                }
 
                 const row = `
                     <tr>
@@ -515,10 +539,8 @@ async function loadAuditLogs() {
                                 ${action}
                             </span>
                         </td>
-                        <td style="font-size:13px;">${userEmail}</td>
-                        <td class="hide-mobile">
-                            <pre style="font-size:10px; max-width:250px; overflow:auto; background:#f9fafb; padding:8px; border-radius:6px; margin:0; max-height:80px;">${details}</pre>
-                        </td>
+                        <td style="font-size:13px; color:#1f2937;">${userEmail}</td>
+                        <td class="hide-mobile">${detailsHtml}</td>
                     </tr>
                 `;
                 tbody.innerHTML += row;
