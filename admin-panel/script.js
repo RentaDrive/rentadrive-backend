@@ -80,7 +80,16 @@ function logout() {
 }
 
 // ============================================
-// STATS
+// REFRESH ALL
+// ============================================
+async function refreshAll() {
+    await loadStats();
+    await loadUsers();
+    showToast('🔄 Datos actualizados', 'success');
+}
+
+// ============================================
+// STATS CON ANIMACIÓN
 // ============================================
 async function loadStats() {
     try {
@@ -160,13 +169,20 @@ function applyFilter(filter) {
     let filtered = allUsers;
     if (filter === 'active') {
         filtered = allUsers.filter(u => {
-            const expiry = u.subscriptionExpiry ? new Date(u.subscriptionExpiry) : null;
-            return u.subscriptionActive && expiry && expiry > now;
+            const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry) : null;
+            return u.subscriptionActive && exp && exp > now;
+        });
+    } else if (filter === 'expiring') {
+        filtered = allUsers.filter(u => {
+            const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry) : null;
+            if (!exp || !u.subscriptionActive) return false;
+            const days = Math.floor((exp - now) / (1000 * 60 * 60 * 24));
+            return days >= 0 && days <= 7;
         });
     } else if (filter === 'expired') {
         filtered = allUsers.filter(u => {
-            const expiry = u.subscriptionExpiry ? new Date(u.subscriptionExpiry) : null;
-            return u.subscriptionActive && expiry && expiry <= now;
+            const exp = u.subscriptionExpiry ? new Date(u.subscriptionExpiry) : null;
+            return u.subscriptionActive && exp && exp <= now;
         });
     } else if (filter === 'inactive') {
         filtered = allUsers.filter(u => !u.subscriptionActive);
@@ -227,10 +243,13 @@ function displayUsers(users) {
 
         let statusBadge = '';
         let rowClass = '';
-        if (user.subscriptionActive && daysLeft > 0) {
+
+        if (user.subscriptionActive && daysLeft > 7) {
             statusBadge = '<span class="status-badge active">✅ Activa</span>';
-            if (daysLeft <= 3) rowClass = 'row-warning';
-        } else if (user.subscriptionActive && daysLeft <= 0) {
+        } else if (user.subscriptionActive && daysLeft >= 0 && daysLeft <= 7) {
+            statusBadge = '<span class="status-badge expiring">⚠️ Vence pronto</span>';
+            rowClass = 'row-warning';
+        } else if (user.subscriptionActive && daysLeft < 0) {
             statusBadge = '<span class="status-badge expired">⏰ Expirada</span>';
             rowClass = 'row-expired';
         } else {
@@ -238,17 +257,18 @@ function displayUsers(users) {
         }
 
         const daysDisplay = daysLeft > 0
-            ? `<strong class="${daysLeft <= 3 ? 'days-warning' : ''}">${daysLeft}d</strong>`
+            ? `<strong class="${daysLeft <= 7 ? 'days-warning' : ''}">${daysLeft}d</strong>`
             : '<span style="color:#9ca3af">-</span>';
 
         const canManage = currentAdmin.role === 'super_admin' || currentAdmin.role === 'vendedor';
+        const avatarLetter = user.email.charAt(0).toUpperCase();
 
         const row = `
             <tr class="${rowClass}">
                 <td>
                     <div class="user-email-cell">
-                        <span class="user-avatar">${user.email.charAt(0).toUpperCase()}</span>
-                        ${user.email}
+                        <span class="user-avatar">${avatarLetter}</span>
+                        <span>${user.email}</span>
                     </div>
                 </td>
                 <td class="hide-mobile"><strong>${user.plan || 'none'}</strong></td>
@@ -312,9 +332,9 @@ function switchModalTab(tab, e) {
     document.getElementById(`modalTab${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.add('active');
 }
 
-function setDaysAdd(days) { document.getElementById('modalDaysAdd').value = days; }
+function setDaysAdd(days)    { document.getElementById('modalDaysAdd').value = days; }
 function setDaysRemove(days) { document.getElementById('modalDaysRemove').value = days; }
-function setDaysSet(days) { document.getElementById('modalDaysSet').value = days; }
+function setDaysSet(days)    { document.getElementById('modalDaysSet').value = days; }
 
 // ============================================
 // ADD DAYS
@@ -356,7 +376,7 @@ async function removeDaysFromSubscription() {
         showMessage('modalMessage', `⚠️ No puedes quitar más de ${currentUserDaysLeft} días`, 'error');
         return;
     }
-    if (!confirm(`⚠️ ¿Seguro que deseas quitar ${daysToRemove} días?\n\nQuedarán: ${currentUserDaysLeft - daysToRemove} días`)) return;
+    if (!confirm(`⚠️ ¿Seguro que deseas quitar ${daysToRemove} días?\nQuedarán: ${currentUserDaysLeft - daysToRemove} días`)) return;
 
     const newDays = currentUserDaysLeft - daysToRemove;
     try {
@@ -386,7 +406,7 @@ async function setExactDays() {
         showMessage('modalMessage', '📅 Ingresa días válidos (1-730)', 'error');
         return;
     }
-    if (!confirm(`📅 ¿Establecer exactamente ${exactDays} días desde hoy?\n\nReemplazará los días actuales (${currentUserDaysLeft})`)) return;
+    if (!confirm(`📅 ¿Establecer exactamente ${exactDays} días desde hoy?\nReemplazará los días actuales (${currentUserDaysLeft})`)) return;
 
     try {
         const response = await fetch(`${API_URL}/admin/activate-subscription`, {
@@ -423,7 +443,7 @@ async function deactivateSubscription() {
         });
         const data = await response.json();
         if (data.success) {
-            showMessage('modalMessage', `✅ Suscripción desactivada. ${data.daysLost ? `Días perdidos: ${data.daysLost}` : ''}`, 'success');
+            showMessage('modalMessage', `✅ Suscripción desactivada.${data.daysLost ? ` Días perdidos: ${data.daysLost}` : ''}`, 'success');
             setTimeout(() => { closeModal(); loadUsers(); loadStats(); }, 1500);
         } else {
             showMessage('modalMessage', '❌ ' + data.message, 'error');
@@ -439,17 +459,19 @@ async function deactivateSubscription() {
 async function loadAuditLogs() {
     document.getElementById('auditLoading').classList.remove('hidden');
     const limit = document.getElementById('auditLimit')?.value || 50;
+
     try {
         const response = await fetch(`${API_URL}/admin/audit-logs?limit=${limit}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
+
         if (data.success) {
             const tbody = document.getElementById('auditTableBody');
             tbody.innerHTML = '';
 
             if (data.logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:#6b7280;">No hay registros</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:#6b7280;">No hay registros</td></tr>';
                 return;
             }
 
@@ -464,31 +486,38 @@ async function loadAuditLogs() {
                     ? `<strong>${log.adminName}</strong><br><small style="color:#6b7280;">${log.adminEmail || ''}</small>`
                     : (log.adminEmail || '-');
 
+                // Email del usuario afectado
                 const userEmail = log.userEmail || log.targetEmail || '-';
-                const userId = log.userId || '-';
 
                 // Color por tipo de acción
                 let actionBg = '#f3f4f6', actionColor = '#374151';
-                if (log.action?.includes('DESACTIVAR')) { actionBg = '#fee2e2'; actionColor = '#dc2626'; }
-                else if (log.action?.includes('AGREGAR') || log.action?.includes('ACTIVAR') || log.action?.includes('extend')) { actionBg = '#d1fae5'; actionColor = '#059669'; }
-                else if (log.action?.includes('ESTABLECER') || log.action?.includes('activate')) { actionBg = '#dbeafe'; actionColor = '#2563eb'; }
-                else if (log.action?.includes('delete') || log.action?.includes('delete_admin')) { actionBg = '#fce7f3'; actionColor = '#db2777'; }
+                const action = log.action || '';
+                if (action.includes('DESACTIVAR') || action.includes('deactivate')) {
+                    actionBg = '#fee2e2'; actionColor = '#dc2626';
+                } else if (action.includes('AGREGAR') || action.includes('extend')) {
+                    actionBg = '#d1fae5'; actionColor = '#059669';
+                } else if (action.includes('ESTABLECER') || action.includes('activate')) {
+                    actionBg = '#dbeafe'; actionColor = '#2563eb';
+                } else if (action.includes('delete') || action.includes('eliminar')) {
+                    actionBg = '#fce7f3'; actionColor = '#db2777';
+                } else if (action.includes('create') || action.includes('crear')) {
+                    actionBg = '#fef3c7'; actionColor = '#d97706';
+                }
 
                 const details = log.details ? JSON.stringify(log.details, null, 2) : '-';
 
                 const row = `
                     <tr>
-                        <td class="hide-mobile" style="font-size:12px; white-space:nowrap;">${date}</td>
+                        <td class="hide-mobile" style="font-size:12px; white-space:nowrap; color:#6b7280;">${date}</td>
                         <td style="font-size:13px;">${adminLabel}</td>
                         <td>
                             <span style="background:${actionBg}; color:${actionColor}; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap; display:inline-block;">
-                                ${log.action}
+                                ${action}
                             </span>
                         </td>
                         <td style="font-size:13px;">${userEmail}</td>
-                        <td class="hide-mobile" style="font-size:13px;">${userEmail}</td>
                         <td class="hide-mobile">
-                            <pre style="font-size:10px; max-width:250px; overflow:auto; background:#f9fafb; padding:8px; border-radius:6px; margin:0; max-height:100px;">${details}</pre>
+                            <pre style="font-size:10px; max-width:250px; overflow:auto; background:#f9fafb; padding:8px; border-radius:6px; margin:0; max-height:80px;">${details}</pre>
                         </td>
                     </tr>
                 `;
@@ -534,7 +563,7 @@ async function loadAdmins() {
                         <td class="hide-mobile"><strong>${admin.name}</strong></td>
                         <td><span class="role-badge ${admin.role}">${admin.role}</span></td>
                         <td class="hide-mobile">${statusBadge}</td>
-                        <td class="hide-mobile">${lastLogin}</td>
+                        <td class="hide-mobile" style="font-size:12px; color:#6b7280;">${lastLogin}</td>
                         <td>
                             ${!isCurrentUser ? `
                                 <div class="action-buttons">
@@ -570,15 +599,9 @@ async function toggleAdminStatus(adminId, activate, email) {
             body: JSON.stringify({ adminId, active: activate })
         });
         const data = await response.json();
-        if (data.success) {
-            showToast(`✅ ${data.message}`, 'success');
-            loadAdmins();
-        } else {
-            showToast(`❌ ${data.message}`, 'error');
-        }
-    } catch (error) {
-        showToast('❌ Error de conexión', 'error');
-    }
+        if (data.success) { showToast(`✅ ${data.message}`, 'success'); loadAdmins(); }
+        else { showToast(`❌ ${data.message}`, 'error'); }
+    } catch (error) { showToast('❌ Error de conexión', 'error'); }
 }
 
 async function deleteAdmin(adminId, email) {
@@ -590,15 +613,9 @@ async function deleteAdmin(adminId, email) {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
-        if (data.success) {
-            showToast(`✅ ${data.message}`, 'success');
-            loadAdmins();
-        } else {
-            showToast(`❌ ${data.message}`, 'error');
-        }
-    } catch (error) {
-        showToast('❌ Error de conexión', 'error');
-    }
+        if (data.success) { showToast(`✅ ${data.message}`, 'success'); loadAdmins(); }
+        else { showToast(`❌ ${data.message}`, 'error'); }
+    } catch (error) { showToast('❌ Error de conexión', 'error'); }
 }
 
 function openChangeRoleModal(adminId, email, currentRole) {
@@ -620,15 +637,9 @@ async function changeAdminRole(adminId, newRole) {
             body: JSON.stringify({ adminId, newRole })
         });
         const data = await response.json();
-        if (data.success) {
-            showToast(`✅ ${data.message}`, 'success');
-            loadAdmins();
-        } else {
-            showToast(`❌ ${data.message}`, 'error');
-        }
-    } catch (error) {
-        showToast('❌ Error de conexión', 'error');
-    }
+        if (data.success) { showToast(`✅ ${data.message}`, 'success'); loadAdmins(); }
+        else { showToast(`❌ ${data.message}`, 'error'); }
+    } catch (error) { showToast('❌ Error de conexión', 'error'); }
 }
 
 document.getElementById('createAdminForm').addEventListener('submit', async (e) => {

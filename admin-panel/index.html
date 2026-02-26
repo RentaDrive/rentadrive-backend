@@ -7,330 +7,339 @@
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-    <!-- Login Card -->
-    <div id="loginCard" class="login-card">
-        <div class="login-logo">
-            <img src="logo.png" alt="RentaDrive" class="logo-img">
-            <h1>RentaDrive</h1>
+
+<!-- Login Card -->
+<div id="loginCard" class="login-card">
+    <div class="login-logo">
+        <img src="logo.png" alt="RentaDrive" class="logo-img">
+        <h1>RentaDrive</h1>
+    </div>
+    <p class="login-subtitle">Panel de Administración</p>
+    <div id="loginMessage"></div>
+    <form id="loginForm">
+        <div class="form-group">
+            <label>📧 Email</label>
+            <input type="email" id="loginEmail" placeholder="tu@email.com" required autocomplete="email">
         </div>
-        <p class="login-subtitle">Panel de Administración</p>
-        <div id="loginMessage"></div>
-        <form id="loginForm">
+        <div class="form-group">
+            <label>🔒 Contraseña</label>
+            <div class="password-input-wrapper">
+                <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
+                <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPassword', this)" tabindex="-1">👁️</button>
+            </div>
+        </div>
+        <button type="submit" id="loginBtn">🚀 Iniciar Sesión</button>
+    </form>
+</div>
+
+<!-- Dashboard -->
+<div id="dashboard" class="dashboard container">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-left">
+            <img src="logo.png" alt="RentaDrive" class="logo-img-header">
+            <div>
+                <h1>RentaDrive</h1>
+                <span class="header-subtitle">Panel de Administración</span>
+            </div>
+        </div>
+        <div class="user-info">
+            <div class="admin-info-block">
+                <span id="adminName" class="admin-name-text"></span>
+                <span id="adminRole" class="role-badge"></span>
+            </div>
+            <button onclick="refreshAll()" class="btn-small secondary" title="Actualizar datos">🔄</button>
+            <button onclick="logout()" class="btn-small secondary">🚪 Salir</button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card stat-total" onclick="loadUsers()" title="Ver todos los usuarios">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+                <div class="number" id="statTotalUsers">-</div>
+                <div class="stat-label">Total Usuarios</div>
+            </div>
+        </div>
+        <div class="stat-card stat-active" onclick="filterUsersByStatus('active')" title="Ver activos">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+                <div class="number" id="statActiveUsers">-</div>
+                <div class="stat-label">Activas</div>
+            </div>
+        </div>
+        <div class="stat-card stat-inactive" onclick="filterUsersByStatus('inactive')" title="Ver inactivos">
+            <div class="stat-icon">⏸️</div>
+            <div class="stat-info">
+                <div class="number" id="statInactiveUsers">-</div>
+                <div class="stat-label">Inactivas</div>
+            </div>
+        </div>
+        <div class="stat-card stat-expired" onclick="filterUsersByStatus('expired')" title="Ver expirados">
+            <div class="stat-icon">⏰</div>
+            <div class="stat-info">
+                <div class="number" id="statExpiredUsers">-</div>
+                <div class="stat-label">Expiradas</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="tabs">
+        <div class="tab-buttons">
+            <button class="tab-btn active" onclick="showTab('users', event)">
+                <span class="tab-icon">👥</span>
+                <span class="tab-text">Usuarios</span>
+            </button>
+            <button class="tab-btn" onclick="showTab('audit', event)">
+                <span class="tab-icon">📜</span>
+                <span class="tab-text">Auditoría</span>
+            </button>
+            <button id="adminsTabBtn" class="tab-btn hidden" onclick="showTab('admins', event)">
+                <span class="tab-icon">👨‍💼</span>
+                <span class="tab-text">Admins</span>
+            </button>
+        </div>
+
+        <!-- ===== TAB: USUARIOS ===== -->
+        <div id="tabUsers" class="tab-content active">
+            <div id="usersMessage"></div>
+            <div class="search-box">
+                <h3 class="section-title">🔍 Buscar Usuario</h3>
+                <div class="search-row">
+                    <div class="form-group" style="flex:1; margin:0;">
+                        <input type="email" id="searchEmail" placeholder="email@ejemplo.com"
+                            onkeydown="if(event.key==='Enter') searchUser()">
+                    </div>
+                    <div class="button-group" style="margin:0;">
+                        <button onclick="searchUser()">🔍 Buscar</button>
+                        <button onclick="loadUsers()" class="secondary">📋 Ver Todos</button>
+                    </div>
+                </div>
+                <!-- Filtros rápidos -->
+                <div class="filter-row">
+                    <span class="filter-label">Filtrar:</span>
+                    <button class="filter-btn active" onclick="setFilter('all', this)">Todos</button>
+                    <button class="filter-btn" onclick="setFilter('active', this)">✅ Activos</button>
+                    <button class="filter-btn" onclick="setFilter('expiring', this)">⚠️ Por vencer</button>
+                    <button class="filter-btn" onclick="setFilter('expired', this)">⏰ Expirados</button>
+                    <button class="filter-btn" onclick="setFilter('inactive', this)">❌ Inactivos</button>
+                </div>
+            </div>
+
+            <div id="usersLoading" class="loading hidden">Cargando usuarios...</div>
+            <div id="userCount" class="user-count hidden"></div>
+
+            <div class="table-container">
+                <table id="usersTable">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th class="hide-mobile">Plan</th>
+                            <th>Estado</th>
+                            <th class="hide-mobile">Expira</th>
+                            <th class="hide-mobile">Días</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="usersTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ===== TAB: AUDITORÍA ===== -->
+        <div id="tabAudit" class="tab-content">
+            <div class="audit-header-row">
+                <h3 class="section-title">📜 Historial de Acciones</h3>
+                <div class="audit-controls">
+                    <select id="auditLimit" onchange="loadAuditLogs()">
+                        <option value="25">Últimas 25</option>
+                        <option value="50" selected>Últimas 50</option>
+                        <option value="100">Últimas 100</option>
+                    </select>
+                    <button onclick="loadAuditLogs()" class="btn-small secondary">🔄 Recargar</button>
+                </div>
+            </div>
+            <div id="auditMessage"></div>
+            <div id="auditLoading" class="loading hidden">Cargando historial...</div>
+
+            <div class="table-container">
+                <table id="auditTable">
+                    <thead>
+                        <tr>
+                            <th class="hide-mobile">Fecha</th>
+                            <th>Admin</th>
+                            <th>Acción</th>
+                            <th>Usuario afectado</th>
+                            <th class="hide-mobile">Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody id="auditTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- ===== TAB: ADMINS ===== -->
+        <div id="tabAdmins" class="tab-content">
+            <div id="adminsMessage"></div>
+            <div class="search-box">
+                <h3 class="section-title">➕ Crear Administrador</h3>
+                <form id="createAdminForm">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>📧 Email</label>
+                            <input type="email" id="newAdminEmail" placeholder="nuevo@admin.com" required>
+                        </div>
+                        <div class="form-group">
+                            <label>👤 Nombre</label>
+                            <input type="text" id="newAdminName" placeholder="Nombre completo" required>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>🔒 Contraseña</label>
+                            <div class="password-input-wrapper">
+                                <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" required minlength="6">
+                                <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newAdminPassword', this)" tabindex="-1">👁️</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>🎭 Rol</label>
+                            <select id="newAdminRole" required>
+                                <option value="vendedor">Vendedor</option>
+                                <option value="soporte">Soporte</option>
+                                <option value="super_admin">Super Admin</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit">➕ Crear Administrador</button>
+                </form>
+            </div>
+
+            <h3 class="section-title">👨‍💼 Lista de Administradores</h3>
+            <div id="adminsLoading" class="loading hidden">Cargando administradores...</div>
+            <div class="table-container">
+                <table id="adminsTable">
+                    <thead>
+                        <tr>
+                            <th>Email</th>
+                            <th class="hide-mobile">Nombre</th>
+                            <th>Rol</th>
+                            <th class="hide-mobile">Estado</th>
+                            <th class="hide-mobile">Último Login</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="adminsTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ===== MODAL SUSCRIPCIÓN ===== -->
+<div id="subscriptionModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>⚙️ Gestionar Suscripción</h2>
+            <button onclick="closeModal()" class="modal-close-btn" title="Cerrar">✕</button>
+        </div>
+        <div id="modalMessage"></div>
+
+        <div class="modal-info">
+            <div class="modal-info-item">
+                <span class="modal-info-label">📧 Usuario</span>
+                <span id="modalUserEmail" class="modal-info-value"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">📊 Estado</span>
+                <span id="modalUserStatus" class="modal-info-value"></span>
+            </div>
+            <div class="modal-info-item">
+                <span class="modal-info-label">📅 Expira</span>
+                <span id="modalUserExpiry" class="modal-info-value"></span>
+            </div>
+            <div class="modal-info-item highlight">
+                <span class="modal-info-label">⏳ Días restantes</span>
+                <span id="modalDaysLeft" class="modal-info-value days-value">-</span>
+            </div>
+        </div>
+
+        <div class="modal-tabs">
+            <button type="button" class="modal-tab-btn active" onclick="switchModalTab('add', event)">➕ Agregar</button>
+            <button type="button" class="modal-tab-btn" onclick="switchModalTab('remove', event)">➖ Quitar</button>
+            <button type="button" class="modal-tab-btn" onclick="switchModalTab('set', event)">📅 Establecer</button>
+        </div>
+
+        <!-- Agregar días -->
+        <div id="modalTabAdd" class="modal-tab-content active">
             <div class="form-group">
-                <label>📧 Email</label>
-                <input type="email" id="loginEmail" placeholder="tu@email.com" required autocomplete="email">
+                <label>📅 Días a agregar (se suman a los actuales)</label>
+                <input type="number" id="modalDaysAdd" min="1" max="365" value="30">
             </div>
+            <div class="quick-buttons">
+                <button type="button" onclick="setDaysAdd(7)" class="btn-quick">+7d</button>
+                <button type="button" onclick="setDaysAdd(15)" class="btn-quick">+15d</button>
+                <button type="button" onclick="setDaysAdd(30)" class="btn-quick">+30d</button>
+                <button type="button" onclick="setDaysAdd(60)" class="btn-quick">+60d</button>
+                <button type="button" onclick="setDaysAdd(90)" class="btn-quick">+90d</button>
+                <button type="button" onclick="setDaysAdd(180)" class="btn-quick">+180d</button>
+            </div>
+            <button onclick="addDaysToSubscription()" class="btn-action">✅ Agregar Días</button>
+        </div>
+
+        <!-- Quitar días -->
+        <div id="modalTabRemove" class="modal-tab-content">
             <div class="form-group">
-                <label>🔒 Contraseña</label>
-                <div class="password-input-wrapper">
-                    <input type="password" id="loginPassword" placeholder="••••••••" required autocomplete="current-password">
-                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('loginPassword', this)" tabindex="-1">👁️</button>
-                </div>
+                <label>📅 Días a quitar</label>
+                <input type="number" id="modalDaysRemove" min="1" max="365" value="7">
+                <small style="color:#ef4444; font-size:12px; margin-top:5px; display:block;">
+                    ⚠️ Días actuales: <span id="currentDaysRemove">-</span>
+                </small>
             </div>
-            <button type="submit" id="loginBtn">🚀 Iniciar Sesión</button>
-        </form>
-    </div>
-
-    <!-- Dashboard -->
-    <div id="dashboard" class="dashboard container">
-
-        <!-- Header -->
-        <div class="header">
-            <div class="header-left">
-                <img src="logo.png" alt="RentaDrive" class="logo-img-header">
-                <div>
-                    <h1>RentaDrive</h1>
-                    <span class="header-subtitle">Panel de Administración</span>
-                </div>
+            <div class="quick-buttons">
+                <button type="button" onclick="setDaysRemove(1)" class="btn-quick danger-outline">-1d</button>
+                <button type="button" onclick="setDaysRemove(3)" class="btn-quick danger-outline">-3d</button>
+                <button type="button" onclick="setDaysRemove(7)" class="btn-quick danger-outline">-7d</button>
+                <button type="button" onclick="setDaysRemove(15)" class="btn-quick danger-outline">-15d</button>
+                <button type="button" onclick="setDaysRemove(30)" class="btn-quick danger-outline">-30d</button>
+                <button type="button" onclick="setDaysRemove(60)" class="btn-quick danger-outline">-60d</button>
             </div>
-            <div class="user-info">
-                <div class="admin-info-block">
-                    <span id="adminName" class="admin-name-text"></span>
-                    <span id="adminRole" class="role-badge"></span>
-                </div>
-                <button onclick="logout()" class="btn-small secondary">🚪 Salir</button>
-            </div>
+            <button onclick="removeDaysFromSubscription()" class="btn-action danger">➖ Quitar Días</button>
         </div>
 
-        <!-- Stats -->
-        <div class="stats-grid">
-            <div class="stat-card stat-total" onclick="loadUsers()">
-                <div class="stat-icon">👥</div>
-                <div class="stat-info">
-                    <div class="number" id="statTotalUsers">-</div>
-                    <div class="stat-label">Total Usuarios</div>
-                </div>
+        <!-- Establecer días -->
+        <div id="modalTabSet" class="modal-tab-content">
+            <div class="form-group">
+                <label>📅 Establecer días exactos desde hoy</label>
+                <input type="number" id="modalDaysSet" min="1" max="730" value="30">
+                <small style="color:#6b7280; font-size:12px; margin-top:5px; display:block;">
+                    💡 Reemplaza los días actuales
+                </small>
             </div>
-            <div class="stat-card stat-active" onclick="filterUsersByStatus('active')">
-                <div class="stat-icon">✅</div>
-                <div class="stat-info">
-                    <div class="number" id="statActiveUsers">-</div>
-                    <div class="stat-label">Activas</div>
-                </div>
+            <div class="quick-buttons">
+                <button type="button" onclick="setDaysSet(30)" class="btn-quick">30d</button>
+                <button type="button" onclick="setDaysSet(60)" class="btn-quick">60d</button>
+                <button type="button" onclick="setDaysSet(90)" class="btn-quick">90d</button>
+                <button type="button" onclick="setDaysSet(180)" class="btn-quick">180d</button>
+                <button type="button" onclick="setDaysSet(365)" class="btn-quick">1 año</button>
+                <button type="button" onclick="setDaysSet(730)" class="btn-quick">2 años</button>
             </div>
-            <div class="stat-card stat-inactive" onclick="filterUsersByStatus('inactive')">
-                <div class="stat-icon">⏸️</div>
-                <div class="stat-info">
-                    <div class="number" id="statInactiveUsers">-</div>
-                    <div class="stat-label">Inactivas</div>
-                </div>
-            </div>
-            <div class="stat-card stat-expired" onclick="filterUsersByStatus('expired')">
-                <div class="stat-icon">⏰</div>
-                <div class="stat-info">
-                    <div class="number" id="statExpiredUsers">-</div>
-                    <div class="stat-label">Expiradas</div>
-                </div>
-            </div>
+            <button onclick="setExactDays()" class="btn-action">📅 Establecer Días</button>
         </div>
 
-        <!-- Tabs -->
-        <div class="tabs">
-            <div class="tab-buttons">
-                <button class="tab-btn active" onclick="showTab('users', event)">
-                    <span class="tab-icon">👥</span>
-                    <span class="tab-text">Usuarios</span>
-                </button>
-                <button class="tab-btn" onclick="showTab('audit', event)">
-                    <span class="tab-icon">📜</span>
-                    <span class="tab-text">Auditoría</span>
-                </button>
-                <button id="adminsTabBtn" class="tab-btn hidden" onclick="showTab('admins', event)">
-                    <span class="tab-icon">👨‍💼</span>
-                    <span class="tab-text">Admins</span>
-                </button>
-            </div>
-
-            <!-- Tab: Usuarios -->
-            <div id="tabUsers" class="tab-content active">
-                <div id="usersMessage"></div>
-                <div class="search-box">
-                    <h3 class="section-title">🔍 Buscar Usuario</h3>
-                    <div class="search-row">
-                        <div class="form-group" style="flex:1; margin:0;">
-                            <input type="email" id="searchEmail" placeholder="email@ejemplo.com"
-                                onkeydown="if(event.key==='Enter') searchUser()">
-                        </div>
-                        <div class="button-group" style="margin:0;">
-                            <button onclick="searchUser()">🔍 Buscar</button>
-                            <button onclick="loadUsers()" class="secondary">📋 Ver Todos</button>
-                        </div>
-                    </div>
-                    <div class="filter-row">
-                        <span class="filter-label">Filtrar:</span>
-                        <button class="filter-btn active" onclick="setFilter('all', this)">Todos</button>
-                        <button class="filter-btn" onclick="setFilter('active', this)">✅ Activos</button>
-                        <button class="filter-btn" onclick="setFilter('expired', this)">⏰ Expirados</button>
-                        <button class="filter-btn" onclick="setFilter('inactive', this)">❌ Inactivos</button>
-                    </div>
-                </div>
-                <div id="usersLoading" class="loading hidden">Cargando usuarios...</div>
-                <div id="userCount" class="user-count hidden"></div>
-                <div class="table-container">
-                    <table id="usersTable">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th class="hide-mobile">Plan</th>
-                                <th>Estado</th>
-                                <th class="hide-mobile">Expira</th>
-                                <th class="hide-mobile">Días</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usersTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Tab: Auditoría -->
-            <div id="tabAudit" class="tab-content">
-                <div class="audit-header-row">
-                    <h3 class="section-title">📜 Historial de Acciones</h3>
-                    <div class="audit-controls">
-                        <select id="auditLimit" onchange="loadAuditLogs()">
-                            <option value="25">Últimas 25</option>
-                            <option value="50" selected>Últimas 50</option>
-                            <option value="100">Últimas 100</option>
-                        </select>
-                        <button onclick="loadAuditLogs()" class="btn-small secondary">🔄 Recargar</button>
-                    </div>
-                </div>
-                <div id="auditMessage"></div>
-                <div id="auditLoading" class="loading hidden">Cargando historial...</div>
-                <div class="table-container">
-                    <table id="auditTable">
-                        <thead>
-                            <tr>
-                                <th class="hide-mobile">Fecha</th>
-                                <th>Admin</th>
-                                <th>Acción</th>
-                                <th>Usuario afectado</th>
-                                <th class="hide-mobile">Email usuario</th>
-                                <th class="hide-mobile">Detalles</th>
-                            </tr>
-                        </thead>
-                        <tbody id="auditTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
-
-            <!-- Tab: Admins -->
-            <div id="tabAdmins" class="tab-content">
-                <div id="adminsMessage"></div>
-                <div class="search-box">
-                    <h3 class="section-title">➕ Crear Administrador</h3>
-                    <form id="createAdminForm">
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>📧 Email</label>
-                                <input type="email" id="newAdminEmail" placeholder="nuevo@admin.com" required>
-                            </div>
-                            <div class="form-group">
-                                <label>👤 Nombre</label>
-                                <input type="text" id="newAdminName" placeholder="Nombre completo" required>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label>🔒 Contraseña</label>
-                                <div class="password-input-wrapper">
-                                    <input type="password" id="newAdminPassword" placeholder="Mínimo 6 caracteres" required minlength="6">
-                                    <button type="button" class="toggle-password" onclick="togglePasswordVisibility('newAdminPassword', this)" tabindex="-1">👁️</button>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <label>🎭 Rol</label>
-                                <select id="newAdminRole" required>
-                                    <option value="vendedor">Vendedor</option>
-                                    <option value="soporte">Soporte</option>
-                                    <option value="super_admin">Super Admin</option>
-                                </select>
-                            </div>
-                        </div>
-                        <button type="submit">➕ Crear Administrador</button>
-                    </form>
-                </div>
-                <h3 class="section-title">👨‍💼 Lista de Administradores</h3>
-                <div id="adminsLoading" class="loading hidden">Cargando administradores...</div>
-                <div class="table-container">
-                    <table id="adminsTable">
-                        <thead>
-                            <tr>
-                                <th>Email</th>
-                                <th class="hide-mobile">Nombre</th>
-                                <th>Rol</th>
-                                <th class="hide-mobile">Estado</th>
-                                <th class="hide-mobile">Último Login</th>
-                                <th>Acciones</th>
-                            </tr>
-                        </thead>
-                        <tbody id="adminsTableBody"></tbody>
-                    </table>
-                </div>
-            </div>
+        <div class="modal-buttons" style="margin-top:20px;">
+            <button onclick="deactivateSubscription()" class="danger">🚫 Desactivar</button>
+            <button onclick="closeModal()" class="secondary">❌ Cancelar</button>
         </div>
     </div>
+</div>
 
-    <!-- Modal Suscripción -->
-    <div id="subscriptionModal" class="modal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h2>⚙️ Gestionar Suscripción</h2>
-                <button onclick="closeModal()" class="modal-close-btn">✕</button>
-            </div>
-            <div id="modalMessage"></div>
-            <div class="modal-info">
-                <div class="modal-info-item">
-                    <span class="modal-info-label">📧 Usuario</span>
-                    <span id="modalUserEmail" class="modal-info-value"></span>
-                </div>
-                <div class="modal-info-item">
-                    <span class="modal-info-label">📊 Estado</span>
-                    <span id="modalUserStatus" class="modal-info-value"></span>
-                </div>
-                <div class="modal-info-item">
-                    <span class="modal-info-label">📅 Expira</span>
-                    <span id="modalUserExpiry" class="modal-info-value"></span>
-                </div>
-                <div class="modal-info-item highlight">
-                    <span class="modal-info-label">⏳ Días restantes</span>
-                    <span id="modalDaysLeft" class="modal-info-value days-value">-</span>
-                </div>
-            </div>
-            <div class="modal-tabs">
-                <button type="button" class="modal-tab-btn active" onclick="switchModalTab('add', event)">➕ Agregar</button>
-                <button type="button" class="modal-tab-btn" onclick="switchModalTab('remove', event)">➖ Quitar</button>
-                <button type="button" class="modal-tab-btn" onclick="switchModalTab('set', event)">📅 Establecer</button>
-            </div>
+<!-- Toast Container -->
+<div id="toastContainer" class="toast-container"></div>
 
-            <!-- Tab: Agregar días -->
-            <div id="modalTabAdd" class="modal-tab-content active">
-                <div class="form-group">
-                    <label>📅 Días a agregar</label>
-                    <input type="number" id="modalDaysAdd" min="1" max="365" value="30">
-                </div>
-                <div class="quick-buttons">
-                    <button type="button" onclick="setDaysAdd(7)" class="btn-quick">+7d</button>
-                    <button type="button" onclick="setDaysAdd(15)" class="btn-quick">+15d</button>
-                    <button type="button" onclick="setDaysAdd(30)" class="btn-quick">+30d</button>
-                    <button type="button" onclick="setDaysAdd(60)" class="btn-quick">+60d</button>
-                    <button type="button" onclick="setDaysAdd(90)" class="btn-quick">+90d</button>
-                    <button type="button" onclick="setDaysAdd(180)" class="btn-quick">+180d</button>
-                </div>
-                <button onclick="addDaysToSubscription()" class="btn-action">✅ Agregar Días</button>
-            </div>
-
-            <!-- Tab: Quitar días -->
-            <div id="modalTabRemove" class="modal-tab-content">
-                <div class="form-group">
-                    <label>📅 Días a quitar</label>
-                    <input type="number" id="modalDaysRemove" min="1" max="365" value="7">
-                    <small style="color:#ef4444; font-size:12px; margin-top:5px; display:block;">
-                        ⚠️ Días actuales: <span id="currentDaysRemove">-</span>
-                    </small>
-                </div>
-                <div class="quick-buttons">
-                    <button type="button" onclick="setDaysRemove(1)" class="btn-quick danger-outline">-1d</button>
-                    <button type="button" onclick="setDaysRemove(3)" class="btn-quick danger-outline">-3d</button>
-                    <button type="button" onclick="setDaysRemove(7)" class="btn-quick danger-outline">-7d</button>
-                    <button type="button" onclick="setDaysRemove(15)" class="btn-quick danger-outline">-15d</button>
-                    <button type="button" onclick="setDaysRemove(30)" class="btn-quick danger-outline">-30d</button>
-                    <button type="button" onclick="setDaysRemove(60)" class="btn-quick danger-outline">-60d</button>
-                </div>
-                <button onclick="removeDaysFromSubscription()" class="btn-action danger">➖ Quitar Días</button>
-            </div>
-
-            <!-- Tab: Establecer días -->
-            <div id="modalTabSet" class="modal-tab-content">
-                <div class="form-group">
-                    <label>📅 Establecer días exactos desde hoy</label>
-                    <input type="number" id="modalDaysSet" min="1" max="730" value="30">
-                    <small style="color:#6b7280; font-size:12px; margin-top:5px; display:block;">
-                        💡 Reemplaza los días actuales
-                    </small>
-                </div>
-                <div class="quick-buttons">
-                    <button type="button" onclick="setDaysSet(30)" class="btn-quick">30d</button>
-                    <button type="button" onclick="setDaysSet(60)" class="btn-quick">60d</button>
-                    <button type="button" onclick="setDaysSet(90)" class="btn-quick">90d</button>
-                    <button type="button" onclick="setDaysSet(180)" class="btn-quick">180d</button>
-                    <button type="button" onclick="setDaysSet(365)" class="btn-quick">1 año</button>
-                    <button type="button" onclick="setDaysSet(730)" class="btn-quick">2 años</button>
-                </div>
-                <button onclick="setExactDays()" class="btn-action">📅 Establecer Días</button>
-            </div>
-
-            <div class="modal-buttons" style="margin-top:20px;">
-                <button onclick="deactivateSubscription()" class="danger">🚫 Desactivar</button>
-                <button onclick="closeModal()" class="secondary">❌ Cancelar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Toast Container -->
-    <div id="toastContainer" class="toast-container"></div>
-
-    <script src="script.js"></script>
+<script src="script.js"></script>
 </body>
 </html>
