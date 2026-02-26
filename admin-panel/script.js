@@ -6,6 +6,7 @@ let currentUserDaysLeft = 0;
 let currentUserExpiry = null;
 let allUsers = [];
 let currentFilter = 'all';
+let allAuditLogs = [];  // ← nuevo
 
 // ============================================
 // INIT
@@ -24,10 +25,8 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
     const btn = document.getElementById('loginBtn');
     btn.textContent = '⏳ Iniciando...';
     btn.disabled = true;
-
     const email = document.getElementById('loginEmail').value;
     const password = document.getElementById('loginPassword').value;
-
     try {
         const response = await fetch(`${API_URL}/admin/login`, {
             method: 'POST',
@@ -143,7 +142,7 @@ async function loadUsers() {
 }
 
 // ============================================
-// FILTROS
+// FILTROS USUARIOS
 // ============================================
 function setFilter(filter, btn) {
     currentFilter = filter;
@@ -243,7 +242,6 @@ function displayUsers(users) {
 
         let statusBadge = '';
         let rowClass = '';
-
         if (user.subscriptionActive && daysLeft > 7) {
             statusBadge = '<span class="status-badge active">✅ Activa</span>';
         } else if (user.subscriptionActive && daysLeft >= 0 && daysLeft <= 7) {
@@ -277,7 +275,7 @@ function displayUsers(users) {
                 <td class="hide-mobile">${daysDisplay}</td>
                 <td>
                     ${canManage
-                        ? `<button onclick="openModal('${user.userId}', '${user.email}', ${user.subscriptionActive}, '${user.subscriptionExpiry}')" class="btn-small" title="Gestionar suscripción">⚙️</button>`
+                        ? `<button onclick="openModal('${user.userId}', '${user.email}', ${user.subscriptionActive}, '${user.subscriptionExpiry}')" class="btn-small" title="Gestionar">⚙️</button>`
                         : '-'}
                 </td>
             </tr>
@@ -307,7 +305,6 @@ function openModal(userId, email, isActive, expiry) {
     document.getElementById('modalDaysRemove').value = '7';
     document.getElementById('modalDaysSet').value = '30';
     document.getElementById('modalMessage').innerHTML = '';
-
     switchModalTab('add', null);
     document.getElementById('subscriptionModal').style.display = 'flex';
 }
@@ -376,8 +373,7 @@ async function removeDaysFromSubscription() {
         showMessage('modalMessage', `⚠️ No puedes quitar más de ${currentUserDaysLeft} días`, 'error');
         return;
     }
-    if (!confirm(`⚠️ ¿Seguro que deseas quitar ${daysToRemove} días?\nQuedarán: ${currentUserDaysLeft - daysToRemove} días`)) return;
-
+    if (!confirm(`⚠️ ¿Quitar ${daysToRemove} días?\nQuedarán: ${currentUserDaysLeft - daysToRemove} días`)) return;
     const newDays = currentUserDaysLeft - daysToRemove;
     try {
         const response = await fetch(`${API_URL}/admin/activate-subscription`, {
@@ -387,7 +383,7 @@ async function removeDaysFromSubscription() {
         });
         const data = await response.json();
         if (data.success) {
-            showMessage('modalMessage', `✅ Se quitaron ${daysToRemove} días. Quedan: ${newDays} días`, 'success');
+            showMessage('modalMessage', `✅ Quitados ${daysToRemove} días. Quedan: ${newDays} días`, 'success');
             setTimeout(() => { closeModal(); loadUsers(); loadStats(); }, 1500);
         } else {
             showMessage('modalMessage', '❌ ' + data.message, 'error');
@@ -406,8 +402,7 @@ async function setExactDays() {
         showMessage('modalMessage', '📅 Ingresa días válidos (1-730)', 'error');
         return;
     }
-    if (!confirm(`📅 ¿Establecer exactamente ${exactDays} días desde hoy?\nReemplazará los días actuales (${currentUserDaysLeft})`)) return;
-
+    if (!confirm(`📅 ¿Establecer ${exactDays} días desde hoy?\nReemplaza los actuales (${currentUserDaysLeft})`)) return;
     try {
         const response = await fetch(`${API_URL}/admin/activate-subscription`, {
             method: 'POST',
@@ -430,11 +425,10 @@ async function setExactDays() {
 // DEACTIVATE
 // ============================================
 async function deactivateSubscription() {
-    const reason = prompt('🚫 ¿Por qué deseas desactivar esta suscripción?\n\nEjemplos:\n• No pagó\n• Solicitó cancelación\n• Infracción de términos\n\nRazón:', '');
+    const reason = prompt('🚫 Razón para desactivar:\n\nEjemplos:\n• No pagó\n• Solicitó cancelación\n• Infracción', '');
     if (reason === null) return;
     const finalReason = reason.trim() || 'Sin razón especificada';
-    if (!confirm(`⚠️ ¿Confirmas desactivar esta suscripción?\n\nRazón: ${finalReason}`)) return;
-
+    if (!confirm(`⚠️ ¿Confirmas desactivar?\n\nRazón: ${finalReason}`)) return;
     try {
         const response = await fetch(`${API_URL}/admin/deactivate-subscription`, {
             method: 'POST',
@@ -459,92 +453,15 @@ async function deactivateSubscription() {
 async function loadAuditLogs() {
     document.getElementById('auditLoading').classList.remove('hidden');
     const limit = document.getElementById('auditLimit')?.value || 50;
-
     try {
         const response = await fetch(`${API_URL}/admin/audit-logs?limit=${limit}`, {
             headers: { 'Authorization': `Bearer ${token}` }
         });
         const data = await response.json();
-
         if (data.success) {
-            const tbody = document.getElementById('auditTableBody');
-            tbody.innerHTML = '';
-
-            if (data.logs.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:40px; color:#6b7280;">No hay registros</td></tr>';
-                return;
-            }
-
-            data.logs.forEach(log => {
-                // Fecha
-                const date = log.timestamp
-                    ? new Date(log.timestamp).toLocaleString('es-MX', {
-                        day: '2-digit', month: '2-digit',
-                        hour: '2-digit', minute: '2-digit'
-                    }) : '-';
-
-                // Admin
-                const adminLabel = log.adminName
-                    ? `<strong>${log.adminName}</strong><br><small style="color:#6b7280;">${log.adminEmail || ''}</small>`
-                    : (log.adminEmail || '-');
-
-                // ✅ Email del usuario afectado — lee de varias posibles ubicaciones
-                const userEmail =
-                    log.userEmail ||
-                    log.targetEmail ||
-                    log.details?.userEmail ||
-                    log.details?.email ||
-                    '-';
-
-                // Color por tipo de acción
-                let actionBg = '#f3f4f6', actionColor = '#374151';
-                const action = log.action || '';
-                if (action.includes('DESACTIVAR') || action.includes('deactivate')) {
-                    actionBg = '#fee2e2'; actionColor = '#dc2626';
-                } else if (action.includes('AGREGAR') || action.includes('extend') || action.includes('add_days')) {
-                    actionBg = '#d1fae5'; actionColor = '#059669';
-                } else if (action.includes('ESTABLECER') || action.includes('activate') || action.includes('set_days')) {
-                    actionBg = '#dbeafe'; actionColor = '#2563eb';
-                } else if (action.includes('QUITAR') || action.includes('remove_days')) {
-                    actionBg = '#fef3c7'; actionColor = '#d97706';
-                } else if (action.includes('delete') || action.includes('eliminar')) {
-                    actionBg = '#fce7f3'; actionColor = '#db2777';
-                } else if (action.includes('create') || action.includes('crear')) {
-                    actionBg = '#ede9fe'; actionColor = '#7c3aed';
-                }
-
-                // Detalles — muestra campos legibles en lugar del JSON crudo
-                let detailsHtml = '-';
-                if (log.details) {
-                    const d = log.details;
-                    const lines = [];
-                    if (d.daysAdded)     lines.push(`➕ +${d.daysAdded} días`);
-                    if (d.daysRemoved)   lines.push(`➖ -${d.daysRemoved} días`);
-                    if (d.newDaysTotal !== undefined) lines.push(`📅 Total: ${d.newDaysTotal} días`);
-                    if (d.description)   lines.push(`📝 ${d.description}`);
-                    if (d.reason)        lines.push(`💬 ${d.reason}`);
-                    if (d.newExpiry)     lines.push(`🗓️ Expira: ${new Date(d.newExpiry).toLocaleDateString('es-MX')}`);
-
-                    detailsHtml = lines.length > 0
-                        ? `<div class="audit-details">${lines.join('<br>')}</div>`
-                        : `<pre style="font-size:10px; max-width:220px; overflow:auto; background:#f9fafb; padding:6px; border-radius:6px; margin:0; max-height:80px;">${JSON.stringify(log.details, null, 2)}</pre>`;
-                }
-
-                const row = `
-                    <tr>
-                        <td class="hide-mobile" style="font-size:12px; white-space:nowrap; color:#6b7280;">${date}</td>
-                        <td style="font-size:13px;">${adminLabel}</td>
-                        <td>
-                            <span style="background:${actionBg}; color:${actionColor}; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap; display:inline-block;">
-                                ${action}
-                            </span>
-                        </td>
-                        <td style="font-size:13px; color:#1f2937;">${userEmail}</td>
-                        <td class="hide-mobile">${detailsHtml}</td>
-                    </tr>
-                `;
-                tbody.innerHTML += row;
-            });
+            allAuditLogs = data.logs;
+            const searchTerm = document.getElementById('auditSearch')?.value || '';
+            renderAuditLogs(allAuditLogs, searchTerm);
         } else {
             showMessage('auditMessage', data.message, 'error');
         }
@@ -553,6 +470,119 @@ async function loadAuditLogs() {
     } finally {
         document.getElementById('auditLoading').classList.add('hidden');
     }
+}
+
+// ============================================
+// RENDER AUDIT + BÚSQUEDA CON HIGHLIGHT
+// ============================================
+function renderAuditLogs(logs, searchTerm = '') {
+    const tbody = document.getElementById('auditTableBody');
+    const countEl = document.getElementById('auditCount');
+    const term = searchTerm.toLowerCase().trim();
+
+    const filtered = term
+        ? logs.filter(log => {
+            const userEmail  = (log.userEmail || log.targetEmail || log.targetAdminEmail || '').toLowerCase();
+            const adminEmail = (log.adminEmail || '').toLowerCase();
+            const adminName  = (log.adminName || '').toLowerCase();
+            const action     = (log.action || '').toLowerCase();
+            const desc       = (log.details?.description || '').toLowerCase();
+            return userEmail.includes(term)
+                || adminEmail.includes(term)
+                || adminName.includes(term)
+                || action.includes(term)
+                || desc.includes(term);
+        })
+        : logs;
+
+    if (countEl) {
+        if (term && filtered.length !== logs.length) {
+            countEl.classList.remove('hidden');
+            countEl.textContent = `${filtered.length} resultado${filtered.length !== 1 ? 's' : ''} de ${logs.length} registros`;
+        } else {
+            countEl.classList.add('hidden');
+        }
+    }
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align:center; padding:40px; color:#6b7280;">
+            ${term ? `❌ Sin resultados para "<strong>${term}</strong>"` : 'No hay registros'}
+        </td></tr>`;
+        return;
+    }
+
+    const highlight = (text) => {
+        if (!term || !text || text === '-') return text;
+        const safe = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return text.replace(new RegExp(`(${safe})`, 'gi'),
+            '<mark style="background:#fef08a; border-radius:3px; padding:0 2px;">$1</mark>');
+    };
+
+    tbody.innerHTML = '';
+    filtered.forEach(log => {
+        const date = log.timestamp
+            ? new Date(log.timestamp).toLocaleString('es-MX', {
+                day: '2-digit', month: '2-digit',
+                hour: '2-digit', minute: '2-digit'
+            }) : '-';
+
+        const adminLabel = log.adminName
+            ? `<strong>${log.adminName}</strong><br><small style="color:#6b7280;">${log.adminEmail || ''}</small>`
+            : (log.adminEmail || '-');
+
+        const userEmail = log.userEmail || log.targetEmail || log.targetAdminEmail || '-';
+
+        let actionBg = '#f3f4f6', actionColor = '#374151';
+        const action = log.action || '';
+        if (action.includes('DESACTIVAR') || action.includes('deactivate'))         { actionBg = '#fee2e2'; actionColor = '#dc2626'; }
+        else if (action.includes('AGREGAR') || action.includes('extend') || action.includes('add_days')) { actionBg = '#d1fae5'; actionColor = '#059669'; }
+        else if (action.includes('ESTABLECER') || action.includes('activate'))      { actionBg = '#dbeafe'; actionColor = '#2563eb'; }
+        else if (action.includes('QUITAR') || action.includes('remove_days'))       { actionBg = '#fef3c7'; actionColor = '#d97706'; }
+        else if (action.includes('delete'))                                          { actionBg = '#fce7f3'; actionColor = '#db2777'; }
+        else if (action.includes('create') || action.includes('change_admin_role')) { actionBg = '#ede9fe'; actionColor = '#7c3aed'; }
+
+        let detailsHtml = '-';
+        if (log.details) {
+            const d = log.details;
+            const lines = [];
+            if (d.daysAdded)                 lines.push(`➕ +${d.daysAdded} días`);
+            if (d.daysRemoved)               lines.push(`➖ -${d.daysRemoved} días`);
+            if (d.newDaysTotal !== undefined) lines.push(`📅 Total: ${d.newDaysTotal} días`);
+            if (d.description)               lines.push(`📝 ${d.description}`);
+            if (d.reason)                    lines.push(`💬 ${d.reason}`);
+            if (d.newExpiry)                 lines.push(`🗓️ Expira: ${new Date(d.newExpiry).toLocaleDateString('es-MX')}`);
+            if (d.oldRole && d.newRole)      lines.push(`🎭 ${d.oldRole} → ${d.newRole}`);
+            detailsHtml = lines.length > 0
+                ? `<div class="audit-details">${lines.join('<br>')}</div>`
+                : `<pre style="font-size:10px; max-width:220px; overflow:auto; background:#f9fafb; padding:6px; border-radius:6px; margin:0; max-height:80px;">${JSON.stringify(log.details, null, 2)}</pre>`;
+        }
+
+        const row = `
+            <tr>
+                <td class="hide-mobile" style="font-size:12px; white-space:nowrap; color:#6b7280;">${date}</td>
+                <td style="font-size:13px;">${adminLabel}</td>
+                <td>
+                    <span style="background:${actionBg}; color:${actionColor}; padding:4px 8px; border-radius:6px; font-size:11px; font-weight:600; white-space:nowrap; display:inline-block;">
+                        ${action}
+                    </span>
+                </td>
+                <td style="font-size:13px;">${highlight(userEmail)}</td>
+                <td class="hide-mobile">${detailsHtml}</td>
+            </tr>
+        `;
+        tbody.innerHTML += row;
+    });
+}
+
+function filterAuditLogs(term) {
+    if (allAuditLogs.length === 0) return;
+    renderAuditLogs(allAuditLogs, term);
+}
+
+function clearAuditSearch() {
+    const input = document.getElementById('auditSearch');
+    if (input) input.value = '';
+    renderAuditLogs(allAuditLogs, '');
 }
 
 // ============================================
@@ -613,7 +643,7 @@ async function loadAdmins() {
 }
 
 async function toggleAdminStatus(adminId, activate, email) {
-    if (!confirm(`¿Seguro que deseas ${activate ? 'activar' : 'desactivar'} a ${email}?`)) return;
+    if (!confirm(`¿${activate ? 'Activar' : 'Desactivar'} a ${email}?`)) return;
     try {
         const response = await fetch(`${API_URL}/admin/toggle-admin-status`, {
             method: 'POST',
@@ -627,7 +657,7 @@ async function toggleAdminStatus(adminId, activate, email) {
 }
 
 async function deleteAdmin(adminId, email) {
-    if (!confirm(`⚠️ ¿ELIMINAR PERMANENTEMENTE a ${email}?\n\nEsta acción NO se puede deshacer.`)) return;
+    if (!confirm(`⚠️ ¿ELIMINAR a ${email}?\nEsta acción NO se puede deshacer.`)) return;
     if (!confirm(`🚨 ÚLTIMA CONFIRMACIÓN: Se eliminará a ${email}`)) return;
     try {
         const response = await fetch(`${API_URL}/admin/delete-admin/${adminId}`, {
@@ -641,10 +671,9 @@ async function deleteAdmin(adminId, email) {
 }
 
 function openChangeRoleModal(adminId, email, currentRole) {
-    const newRole = prompt(`Cambiar rol de ${email}\n\nRol actual: ${currentRole}\n\nNuevo rol (super_admin, vendedor, soporte):`, currentRole);
+    const newRole = prompt(`Cambiar rol de ${email}\nActual: ${currentRole}\n\nNuevo rol (super_admin, vendedor, soporte):`, currentRole);
     if (!newRole || newRole === currentRole) return;
-    const validRoles = ['super_admin', 'vendedor', 'soporte'];
-    if (!validRoles.includes(newRole)) {
+    if (!['super_admin', 'vendedor', 'soporte'].includes(newRole)) {
         alert('❌ Rol inválido. Debe ser: super_admin, vendedor o soporte');
         return;
     }
@@ -716,7 +745,7 @@ function showMessage(elementId, message, type) {
     const element = document.getElementById(elementId);
     if (!element) return;
     element.className = `message ${type}`;
-    element.textContent = message;
+    element.innerHTML = message;
     element.style.display = 'block';
     setTimeout(() => { element.style.display = 'none'; }, 5000);
 }
@@ -750,7 +779,7 @@ function togglePasswordVisibility(inputId, button) {
 }
 
 // ============================================
-// CLOSE MODAL ON OUTSIDE CLICK
+// CERRAR MODAL AL CLICK AFUERA
 // ============================================
 document.getElementById('subscriptionModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();

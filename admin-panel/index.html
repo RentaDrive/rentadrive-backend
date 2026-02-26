@@ -56,7 +56,7 @@
 
     <!-- Stats -->
     <div class="stats-grid">
-        <div class="stat-card stat-total" onclick="loadUsers()" title="Ver todos los usuarios">
+        <div class="stat-card stat-total" onclick="loadUsers()" title="Ver todos">
             <div class="stat-icon">👥</div>
             <div class="stat-info">
                 <div class="number" id="statTotalUsers">-</div>
@@ -118,7 +118,6 @@
                         <button onclick="loadUsers()" class="secondary">📋 Ver Todos</button>
                     </div>
                 </div>
-                <!-- Filtros rápidos -->
                 <div class="filter-row">
                     <span class="filter-label">Filtrar:</span>
                     <button class="filter-btn active" onclick="setFilter('all', this)">Todos</button>
@@ -128,10 +127,8 @@
                     <button class="filter-btn" onclick="setFilter('inactive', this)">❌ Inactivos</button>
                 </div>
             </div>
-
             <div id="usersLoading" class="loading hidden">Cargando usuarios...</div>
             <div id="userCount" class="user-count hidden"></div>
-
             <div class="table-container">
                 <table id="usersTable">
                     <thead>
@@ -162,9 +159,18 @@
                     <button onclick="loadAuditLogs()" class="btn-small secondary">🔄 Recargar</button>
                 </div>
             </div>
+            <!-- Buscador de logs -->
+            <div class="audit-search-row">
+                <div class="form-group" style="flex:1; margin:0;">
+                    <input type="text" id="auditSearch"
+                        placeholder="🔍 Buscar por email, admin o acción..."
+                        oninput="filterAuditLogs(this.value)">
+                </div>
+                <button onclick="clearAuditSearch()" class="btn-small secondary">✕ Limpiar</button>
+            </div>
             <div id="auditMessage"></div>
             <div id="auditLoading" class="loading hidden">Cargando historial...</div>
-
+            <div id="auditCount" class="user-count hidden"></div>
             <div class="table-container">
                 <table id="auditTable">
                     <thead>
@@ -217,7 +223,6 @@
                     <button type="submit">➕ Crear Administrador</button>
                 </form>
             </div>
-
             <h3 class="section-title">👨‍💼 Lista de Administradores</h3>
             <div id="adminsLoading" class="loading hidden">Cargando administradores...</div>
             <div class="table-container">
@@ -239,7 +244,7 @@
     </div>
 </div>
 
-<!-- ===== MODAL SUSCRIPCIÓN ===== -->
+<!-- Modal Suscripción -->
 <div id="subscriptionModal" class="modal">
     <div class="modal-content">
         <div class="modal-header">
@@ -247,7 +252,6 @@
             <button onclick="closeModal()" class="modal-close-btn" title="Cerrar">✕</button>
         </div>
         <div id="modalMessage"></div>
-
         <div class="modal-info">
             <div class="modal-info-item">
                 <span class="modal-info-label">📧 Usuario</span>
@@ -266,17 +270,15 @@
                 <span id="modalDaysLeft" class="modal-info-value days-value">-</span>
             </div>
         </div>
-
         <div class="modal-tabs">
             <button type="button" class="modal-tab-btn active" onclick="switchModalTab('add', event)">➕ Agregar</button>
             <button type="button" class="modal-tab-btn" onclick="switchModalTab('remove', event)">➖ Quitar</button>
             <button type="button" class="modal-tab-btn" onclick="switchModalTab('set', event)">📅 Establecer</button>
         </div>
-
-        <!-- Agregar días -->
+        <!-- Agregar -->
         <div id="modalTabAdd" class="modal-tab-content active">
             <div class="form-group">
-                <label>📅 Días a agregar (se suman a los actuales)</label>
+                <label>📅 Días a agregar</label>
                 <input type="number" id="modalDaysAdd" min="1" max="365" value="30">
             </div>
             <div class="quick-buttons">
@@ -289,8 +291,7 @@
             </div>
             <button onclick="addDaysToSubscription()" class="btn-action">✅ Agregar Días</button>
         </div>
-
-        <!-- Quitar días -->
+        <!-- Quitar -->
         <div id="modalTabRemove" class="modal-tab-content">
             <div class="form-group">
                 <label>📅 Días a quitar</label>
@@ -309,8 +310,7 @@
             </div>
             <button onclick="removeDaysFromSubscription()" class="btn-action danger">➖ Quitar Días</button>
         </div>
-
-        <!-- Establecer días -->
+        <!-- Establecer -->
         <div id="modalTabSet" class="modal-tab-content">
             <div class="form-group">
                 <label>📅 Establecer días exactos desde hoy</label>
@@ -329,7 +329,6 @@
             </div>
             <button onclick="setExactDays()" class="btn-action">📅 Establecer Días</button>
         </div>
-
         <div class="modal-buttons" style="margin-top:20px;">
             <button onclick="deactivateSubscription()" class="danger">🚫 Desactivar</button>
             <button onclick="closeModal()" class="secondary">❌ Cancelar</button>
@@ -337,9 +336,8 @@
     </div>
 </div>
 
-<!-- Toast Container -->
+<!-- Toast -->
 <div id="toastContainer" class="toast-container"></div>
-
 <script src="script.js"></script>
 </body>
 </html>
