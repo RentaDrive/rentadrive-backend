@@ -1088,3 +1088,32 @@ tr.row-expired td { background: #fff5f5; }
     margin-bottom: 8px;
     font-style: italic;
 }
+
+/* ============================================
+ESTADO VENCE PRONTO (expiring badge)
+============================================ */
+.status-badge.expiring {
+background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+color: #92400e;
+}
+
+/* Botón eliminar en tabla pequeño */
+.btn-small.danger {
+background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+color: white;
+}
+.btn-small.danger:hover {
+background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+}
+
+/* Input confirmación eliminar — resalta en rojo si texto incorrecto */
+#deleteConfirmInput:focus {
+border-color: #ef4444;
+box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15);
+}
+#deleteConfirmInput.confirmed {
+border-color: #10b981;
+box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.15);
+}

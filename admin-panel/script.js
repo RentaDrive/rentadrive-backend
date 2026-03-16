@@ -274,9 +274,14 @@ function displayUsers(users) {
                 <td class="hide-mobile">${expiry ? expiry.toLocaleDateString('es-MX') : 'N/A'}</td>
                 <td class="hide-mobile">${daysDisplay}</td>
                 <td>
-                    ${canManage
-                        ? `<button onclick="openModal('${user.userId}', '${user.email}', ${user.subscriptionActive}, '${user.subscriptionExpiry}')" class="btn-small" title="Gestionar">⚙️</button>`
-                        : '-'}
+                    <div class="action-buttons">
+                        ${canManage
+                            ? `<button onclick="openModal('${user.userId}', '${user.email}', ${user.subscriptionActive}, '${user.subscriptionExpiry}')" class="btn-small" title="Gestionar suscripción">⚙️ Gestionar</button>`
+                            : ''}
+                        ${currentAdmin.role === 'super_admin'
+                            ? `<button onclick="openDeleteModalDirect('${user.userId}', '${user.email}')" class="btn-small danger" title="Eliminar cuenta" style="background:linear-gradient(135deg,#ef4444,#dc2626);box-shadow:0 2px 8px rgba(239,68,68,0.3);">🗑️</button>`
+                            : ''}
+                    </div>
                 </td>
             </tr>
         `;
@@ -784,3 +789,79 @@ function togglePasswordVisibility(inputId, button) {
 document.getElementById('subscriptionModal').addEventListener('click', function(e) {
     if (e.target === this) closeModal();
 });
+
+
+// ============================================
+// ELIMINAR CUENTA DE USUARIO
+// ============================================
+function openDeleteModal() {
+    const email = document.getElementById('modalUserEmail').textContent;
+    document.getElementById('deleteModalEmail').textContent = email;
+    document.getElementById('deleteConfirmInput').value = '';
+    document.getElementById('btnConfirmDelete').disabled = true;
+    document.getElementById('btnConfirmDelete').style.opacity = '0.5';
+    document.getElementById('deleteModalMessage').innerHTML = '';
+    document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function openDeleteModalDirect(userId, email) {
+    currentUserId = userId;
+    document.getElementById('deleteModalEmail').textContent = email;
+    document.getElementById('deleteConfirmInput').value = '';
+    document.getElementById('btnConfirmDelete').disabled = true;
+    document.getElementById('btnConfirmDelete').style.opacity = '0.5';
+    document.getElementById('deleteModalMessage').innerHTML = '';
+    document.getElementById('deleteModal').style.display = 'flex';
+}
+
+function closeDeleteModal() {
+    document.getElementById('deleteModal').style.display = 'none';
+    document.getElementById('deleteConfirmInput').value = '';
+}
+
+function checkDeleteConfirm() {
+    const val = document.getElementById('deleteConfirmInput').value.trim();
+    const btn = document.getElementById('btnConfirmDelete');
+    const ok = val === 'ELIMINAR';
+    btn.disabled = !ok;
+    btn.style.opacity = ok ? '1' : '0.5';
+}
+
+async function confirmDeleteUser() {
+    if (!currentUserId) return;
+    const btn = document.getElementById('btnConfirmDelete');
+    btn.textContent = '⏳ Eliminando...';
+    btn.disabled = true;
+
+    try {
+        const response = await fetch(`${API_URL}/admin/delete-user`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ userId: currentUserId })
+        });
+        const data = await response.json();
+
+        if (data.success) {
+            closeDeleteModal();
+            closeModal();
+            showToast('🗑️ Cuenta eliminada permanentemente', 'success');
+            await loadStats();
+            await loadUsers();
+        } else {
+            document.getElementById('deleteModalMessage').innerHTML =
+                `<div class="message error">❌ ${data.message}</div>`;
+            btn.textContent = '🗑️ Eliminar definitivamente';
+            btn.disabled = false;
+            btn.style.opacity = '1';
+        }
+    } catch (error) {
+        document.getElementById('deleteModalMessage').innerHTML =
+            `<div class="message error">❌ Error de conexión al eliminar</div>`;
+        btn.textContent = '🗑️ Eliminar definitivamente';
+        btn.disabled = false;
+        btn.style.opacity = '1';
+    }
+}

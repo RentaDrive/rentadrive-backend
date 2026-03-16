@@ -331,7 +331,42 @@
         </div>
         <div class="modal-buttons" style="margin-top:20px;">
             <button onclick="deactivateSubscription()" class="danger">🚫 Desactivar</button>
+            <button onclick="openDeleteModal()" class="danger" id="btnDeleteUser" style="background:linear-gradient(135deg,#7f1d1d 0%,#991b1b 100%);box-shadow:0 4px 15px rgba(127,29,29,0.5);">🗑️ Eliminar Cuenta</button>
             <button onclick="closeModal()" class="secondary">❌ Cancelar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Eliminar Cuenta -->
+<div id="deleteModal" class="modal" style="display:none;">
+    <div class="modal-content" style="max-width:480px;">
+        <div class="modal-header">
+            <h2>🗑️ Eliminar Cuenta</h2>
+            <button onclick="closeDeleteModal()" class="modal-close-btn">✕</button>
+        </div>
+        <div style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:12px;padding:16px;margin-bottom:20px;">
+            <p style="color:#7f1d1d;font-weight:700;font-size:15px;margin-bottom:8px;">⚠️ Acción irreversible</p>
+            <p style="color:#991b1b;font-size:13px;">Esto eliminará <strong>permanentemente</strong> todos los datos del usuario de Firebase:</p>
+            <ul style="color:#991b1b;font-size:13px;margin-top:8px;padding-left:18px;line-height:2;">
+                <li>Cuenta de autenticación (Firebase Auth)</li>
+                <li>Datos de suscripción (Realtime Database)</li>
+                <li>Historial y registros asociados</li>
+            </ul>
+        </div>
+        <div class="modal-info" style="grid-template-columns:1fr;">
+            <div class="modal-info-item">
+                <span class="modal-info-label">👤 Usuario a eliminar</span>
+                <span id="deleteModalEmail" class="modal-info-value" style="font-weight:700;color:#7f1d1d;"></span>
+            </div>
+        </div>
+        <div class="form-group" style="margin-top:16px;">
+            <label>✍️ Escribe <strong>ELIMINAR</strong> para confirmar</label>
+            <input type="text" id="deleteConfirmInput" placeholder="Escribe ELIMINAR" oninput="checkDeleteConfirm()" autocomplete="off" />
+        </div>
+        <div id="deleteModalMessage"></div>
+        <div class="modal-buttons">
+            <button onclick="confirmDeleteUser()" class="danger" id="btnConfirmDelete" disabled style="opacity:0.5;background:linear-gradient(135deg,#7f1d1d 0%,#991b1b 100%);">🗑️ Eliminar definitivamente</button>
+            <button onclick="closeDeleteModal()" class="secondary">❌ Cancelar</button>
         </div>
     </div>
 </div>
