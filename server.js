@@ -1350,6 +1350,93 @@ app.post('/api/admin/change-role', authenticateAdmin, requireRole('super_admin')
   }
 });
 
+
+// ============================================
+// ENDPOINT: ELIMINAR USUARIO COMPLETO (solo super_admin)
+// ============================================
+app.delete('/api/admin/delete-user', authenticateAdmin, requireRole('super_admin'), async (req, res) => {
+  try {
+    const { userId } = req.body;
+
+    if (!userId) {
+      return res.status(400).json({ success: false, message: 'userId es requerido' });
+    }
+
+    // Proteger: no permitir eliminar si el userId corresponde a un admin
+    const adminCheck = await db.collection('admins').doc(userId).get();
+    if (adminCheck.exists) {
+      return res.status(403).json({
+        success: false,
+        message: 'No puedes eliminar una cuenta de administrador desde aquí'
+      });
+    }
+
+    // Obtener datos del usuario antes de borrar (para el log)
+    const userDoc = await db.collection('users').doc(userId).get();
+    if (!userDoc.exists) {
+      return res.status(404).json({ success: false, message: 'Usuario no encontrado en Firestore' });
+    }
+    const userData = userDoc.data();
+
+    // 1) Eliminar de Firebase Auth
+    try {
+      await admin.auth().deleteUser(userId);
+      console.log(`🗑️ Firebase Auth eliminado: ${userId}`);
+    } catch (authError) {
+      // Si el usuario no existe en Auth (ya fue borrado antes), continuar de todas formas
+      if (authError.code !== 'auth/user-not-found') {
+        throw authError;
+      }
+      console.log(`⚠️ Usuario no encontrado en Auth (continúa limpieza Firestore): ${userId}`);
+    }
+
+    // 2) Eliminar documento principal de Firestore
+    await db.collection('users').doc(userId).delete();
+    console.log(`🗑️ Firestore users/${userId} eliminado`);
+
+    // 3) Eliminar security_logs asociados al usuario
+    const secLogsSnap = await db.collection('security_logs')
+      .where('userId', '==', userId)
+      .get();
+    const secBatch = db.batch();
+    secLogsSnap.forEach(doc => secBatch.delete(doc.ref));
+    if (!secLogsSnap.empty) await secBatch.commit();
+    console.log(`🗑️ ${secLogsSnap.size} security_logs eliminados`);
+
+    // 4) Registrar en audit_log
+    await db.collection('audit_logs').add({
+      adminId: req.admin.adminId,
+      adminEmail: req.admin.email,
+      adminName: req.admin.name,
+      action: 'ELIMINAR_USUARIO',
+      userId: userId,
+      userEmail: userData.email,
+      details: {
+        action: 'delete_user',
+        deletedEmail: userData.email,
+        deletedPlan: userData.plan || 'none',
+        wasActive: userData.subscriptionActive || false,
+        securityLogsDeleted: secLogsSnap.size,
+        description: `Eliminó cuenta completa de ${userData.email} (Auth + Firestore)`
+      },
+      timestamp: admin.firestore.FieldValue.serverTimestamp()
+    });
+
+    console.log(`✅ Cuenta eliminada por ${req.admin.email}: ${userData.email} (${userId})`);
+
+    res.json({
+      success: true,
+      message: `Cuenta de ${userData.email} eliminada permanentemente`,
+      deletedEmail: userData.email,
+      securityLogsDeleted: secLogsSnap.size
+    });
+
+  } catch (error) {
+    console.error('❌ Error eliminando usuario:', error);
+    res.status(500).json({ success: false, message: 'Error al eliminar usuario: ' + error.message });
+  }
+});
+
 // ============================================
 // ENDPOINT: HEALTH CHECK
 // ============================================
@@ -1380,4 +1467,5 @@ app.listen(PORT, () => {
   console.log(`   POST /api/admin/deactivate-subscription`);
   console.log(`   GET  /api/admin/audit-logs`);
   console.log(`   POST /api/admin/toggle-admin-status (super_admin)`);
+  console.log(`   DELETE /api/admin/delete-user (super_admin)`);
 });
